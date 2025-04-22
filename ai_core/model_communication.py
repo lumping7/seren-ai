@@ -12,6 +12,14 @@ import time
 import uuid
 import datetime
 from typing import Dict, List, Optional, Any, Union
+from enum import Enum
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path for imports
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -21,33 +29,98 @@ if parent_dir not in sys.path:
 # For security
 try:
     from security.quantum_encryption import encrypt_message, decrypt_message
+    has_quantum_security = True
+    logger.info("Quantum encryption module loaded successfully")
 except ImportError:
+    logger.warning("Quantum encryption module not available. Using fallback encryption.")
+    has_quantum_security = False
+    
     # Fallback if security module not available
     def encrypt_message(message, recipient=None):
+        logger.debug(f"Using fallback encryption for message to {recipient}")
         return message
 
     def decrypt_message(encrypted_message, recipient=None):
+        logger.debug(f"Using fallback decryption for message to {recipient}")
         return encrypted_message
 
 # Local imports
 try:
     from ai_core.model_manager import ModelType
+    has_model_manager = True
 except ImportError:
-    # Create a basic ModelType enum if model_manager not available
-    class ModelType:
+    has_model_manager = False
+    # Create a proper Enum class for ModelType if model_manager not available
+    from enum import Enum, auto
+    
+    class ModelType(Enum):
+        """Types of AI models"""
         QWEN = "qwen"
         OLYMPIC = "olympic"
         SYSTEM = "system"
+        
+        @property
+        def value(self):
+            """Get the value of the enum"""
+            return self._value_
+            
+        def __str__(self):
+            return self.value
 
-# Import knowledge library
-from ai_core.knowledge.library import knowledge_library, KnowledgeSource
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Import knowledge library with fallback
+try:
+    from ai_core.knowledge.library import knowledge_library, KnowledgeSource
+    has_knowledge_lib = True
+except ImportError:
+    has_knowledge_lib = False
+    logger.warning("Knowledge library not available. Knowledge sharing capabilities will be limited.")
+    
+    # Create minimal fallback implementations if needed
+    class KnowledgeSource:
+        USER = "user"
+        SYSTEM = "system"
+        MODEL = "model"
+        EXTERNAL = "external"
+        CONVERSATION = "conversation"  # Adding this for use in share_knowledge
+    
+    # Create a more robust knowledge library fallback
+    class KnowledgeLibraryFallback:
+        """Fallback implementation of knowledge library with required methods"""
+        
+        def __init__(self):
+            self.next_id = 1
+            self.entries = {}
+            logger.warning("Using fallback knowledge library implementation")
+            
+        def add_knowledge_entry(self, content, source_type, source_reference="", categories=None, created_by="system", metadata=None):
+            """Add a knowledge entry to the library"""
+            entry_id = f"entry_{self.next_id}"
+            self.next_id += 1
+            self.entries[entry_id] = {
+                "id": entry_id,
+                "content": content,
+                "source_type": source_type,
+                "source_reference": source_reference,
+                "categories": categories or [],
+                "created_by": created_by,
+                "created_at": datetime.datetime.now().isoformat(),
+                "metadata": metadata or {}
+            }
+            logger.info(f"Knowledge entry {entry_id} added to fallback library")
+            return entry_id
+            
+        def retrieve_knowledge(self, query=None, categories=None, limit=5, source_type=None, created_by=None):
+            """Retrieve knowledge entries based on criteria"""
+            logger.warning("Using simplified knowledge retrieval in fallback mode")
+            return []
+            
+        def extract_knowledge(self, text, source_type=None, source_reference=None, categories=None):
+            """Extract knowledge from text"""
+            logger.warning("Knowledge extraction not available in fallback mode")
+            return []
+            
+    # Initialize fallback knowledge library
+    knowledge_library = KnowledgeLibraryFallback()
 
 class MessageType:
     """Types of messages between models"""
