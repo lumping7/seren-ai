@@ -1,18 +1,23 @@
 """
-AI Engine Module
+AI Engine for Seren
 
-Manages Llama3 & Gemma3 models, AI logic switching, and cognitive awareness.
-This is the core interface between the different AI models and the rest of the system.
+Core AI engine responsible for coordinating different models,
+managing interaction modes, and ensuring synchronized operation.
 """
 
 import os
 import sys
 import json
 import logging
-import enum
 import time
-from typing import Dict, List, Optional, Any, Union, Tuple
-from datetime import datetime
+import uuid
+from enum import Enum
+from typing import Dict, List, Optional, Any, Union, Tuple, Callable
+
+# Add parent directory to path for imports
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
 
 # Configure logging
 logging.basicConfig(
@@ -21,767 +26,1111 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class AIEngineMode(str, enum.Enum):
-    """Operating modes for the AI Engine"""
-    COLLABORATIVE = "collaborative"
-    SPECIALIZED = "specialized"
-    COMPETITIVE = "competitive"
-    AUTONOMOUS = "autonomous"
-    REASONING = "reasoning"
+class AIEngineMode(Enum):
+    """Operating modes for the AI engine"""
+    COLLABORATIVE = "collaborative"  # Models work together, sharing insights
+    SPECIALIZED = "specialized"      # Models focus on their specific strengths
+    COMPETITIVE = "competitive"      # Models compete to produce the best solution
 
-class ModelType(str, enum.Enum):
-    """Types of models available in the system"""
-    LLAMA3 = "llama3"
-    GEMMA3 = "gemma3"
-    QWEN25_OMNI = "qwen25_omni"
-    OLYMPIC_CODER = "olympic_coder"
-    HYBRID = "hybrid"
-    NEURO_SYMBOLIC = "neuro_symbolic"
+class ModelType(Enum):
+    """Types of AI models in the system"""
+    QWEN = "qwen"              # Qwen2.5-omni-7b
+    OLYMPIC = "olympic"        # OlympicCoder-7B
+    HYBRID = "hybrid"          # Combined model
+    SPECIALIZED = "specialized"  # Task-specific model
+    SYSTEM = "system"          # System-generated messages
 
 class AIEngine:
     """
-    Core AI Engine that manages model interactions and response generation
+    Core AI Engine for Seren
     
-    This engine handles:
-    1. Model selection and switching
-    2. Collaborative response generation
-    3. Model-to-model communication
-    4. Response enhancement and validation
+    Coordinates multiple AI models to work together in different modes:
+    - Collaborative: Models work together to solve problems
+    - Specialized: Models focus on their specific areas of expertise
+    - Competitive: Models compete to produce the best solutions
+    
+    Bleeding-edge capabilities:
+    1. Dynamic orchestration of multiple specialized models
+    2. Neuro-symbolic integration for explainable outputs
+    3. Continuous self-improvement through federated learning
+    4. Multi-modal reasoning across code, natural language, and diagrams
+    5. Context-aware model selection and optimization
     """
     
-    def __init__(self):
-        """Initialize the AI Engine"""
-        self.models = {}
-        self.active_models = []
-        self.model_weights = {}
-        self.communication_history = []
-        self.last_used_model = None
-        self.status = "initialized"
+    def __init__(self, base_dir: str = None):
+        """Initialize the AI engine"""
+        # Set base directory
+        self.base_dir = base_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
-        # Initialize default configuration
-        self.config = {
-            "temperature": 0.7,
-            "top_p": 0.95,
-            "max_tokens": 2048,
-            "system_prompt": (
-                "You are a superintelligent AI system with neuro-symbolic reasoning capabilities. "
-                "You can collaborate with other AI models to solve complex problems."
-            )
+        # Initialize model states
+        self.models = {
+            ModelType.QWEN: {"status": "ready", "last_used": None},
+            ModelType.OLYMPIC: {"status": "ready", "last_used": None},
+            ModelType.HYBRID: {"status": "ready", "last_used": None}
         }
         
-        # Load models
-        self._load_models()
+        # Initialize engine settings
+        self.default_mode = AIEngineMode.COLLABORATIVE
+        self.last_used_model = None
         
-        logger.info("AI Engine initialized successfully")
+        # Session tracking
+        self.sessions = {}
+        
+        # Performance metrics
+        self.metrics = {
+            "total_queries": 0,
+            "total_response_time": 0,
+            "average_response_time": 0,
+            "model_usage": {model.value: 0 for model in ModelType},
+            "mode_usage": {mode.value: 0 for mode in AIEngineMode}
+        }
+        
+        logger.info("AI Engine initialized")
     
-    def _load_models(self):
-        """Load all available AI models"""
-        try:
-            # In a real implementation, this would load actual models
-            # For now, we simulate the model loading
-            
-            # Define model capabilities for selection
-            self.models = {
-                ModelType.LLAMA3: {
-                    "name": "Llama3",
-                    "version": "3.1.0",
-                    "capabilities": ["reasoning", "coding", "planning", "analysis"],
-                    "strengths": ["logical reasoning", "code generation", "technical analysis"],
-                    "limitations": ["creative thinking", "emotional intelligence"],
-                    "loaded": True
-                },
-                ModelType.GEMMA3: {
-                    "name": "Gemma3",
-                    "version": "3.0.0",
-                    "capabilities": ["reasoning", "creativity", "empathy", "design"],
-                    "strengths": ["creative ideation", "human-centered design", "ethical reasoning"],
-                    "limitations": ["complex code generation", "technical problem solving"],
-                    "loaded": True
-                },
-                ModelType.QWEN25_OMNI: {
-                    "name": "Qwen2.5-Omni",
-                    "version": "7B",
-                    "capabilities": ["omnidirectional understanding", "multimodal fusion", "advanced reasoning"],
-                    "strengths": ["cross-domain synthesis", "holistic understanding", "pattern recognition"],
-                    "limitations": ["specialized implementations", "creative writing"],
-                    "loaded": False  # Would be loaded on demand
-                },
-                ModelType.OLYMPIC_CODER: {
-                    "name": "OlympicCoder",
-                    "version": "7B",
-                    "capabilities": ["code generation", "debugging", "optimization", "testing"],
-                    "strengths": ["algorithm implementation", "code quality", "efficiency"],
-                    "limitations": ["non-technical communication", "creative tasks"],
-                    "loaded": False  # Would be loaded on demand
-                }
-            }
-            
-            # Set default active models
-            self.active_models = [ModelType.LLAMA3, ModelType.GEMMA3]
-            
-            # Set default model weights
-            self.model_weights = {
-                ModelType.LLAMA3: 0.5,
-                ModelType.GEMMA3: 0.5
-            }
-            
-        except Exception as e:
-            logger.error(f"Error loading models: {str(e)}")
-            raise RuntimeError(f"Failed to initialize AI models: {str(e)}")
-    
-    def generate_response(
+    def process_query(
         self,
         query: str,
-        context: Optional[Dict[str, Any]] = None,
-        reasoning_path: Optional[List[Dict[str, Any]]] = None,
-        memory_results: Optional[List[Dict[str, Any]]] = None,
-        mode: AIEngineMode = AIEngineMode.COLLABORATIVE
-    ) -> str:
+        mode: str = None,
+        context: Dict[str, Any] = None,
+        settings: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         """
-        Generate a response using the appropriate model(s) based on the mode
+        Process a query using the appropriate AI models
         
         Args:
-            query: The user query
+            query: The input query/request
+            mode: Collaboration mode (collaborative, specialized, competitive)
             context: Additional context for the query
-            reasoning_path: Results from neuro-symbolic reasoning
-            memory_results: Relevant memories for the query
-            mode: The operation mode for response generation
+            settings: Engine settings to use for this query
             
         Returns:
-            Generated response text
+            Response with generated content and metadata
         """
-        logger.info(f"Generating response in {mode} mode")
-        
-        # Track starting time for performance monitoring
+        # Start timing
         start_time = time.time()
         
-        # Prepare context with reasoning and memory
-        enhanced_context = self._prepare_context(query, context, reasoning_path, memory_results)
+        # Create session ID
+        session_id = str(uuid.uuid4())
         
-        # Generate response based on mode
-        if mode == AIEngineMode.COLLABORATIVE:
-            response = self._generate_collaborative_response(query, enhanced_context)
-        elif mode == AIEngineMode.SPECIALIZED:
-            response = self._generate_specialized_response(query, enhanced_context)
-        elif mode == AIEngineMode.COMPETITIVE:
-            response = self._generate_competitive_response(query, enhanced_context)
-        elif mode == AIEngineMode.AUTONOMOUS:
-            response = self._generate_autonomous_response(query, enhanced_context)
-        else:
-            # Default to collaborative
-            response = self._generate_collaborative_response(query, enhanced_context)
+        # Initialize context if None
+        context = context or {}
+        settings = settings or {}
         
-        # Log performance
-        elapsed_time = time.time() - start_time
-        logger.info(f"Response generated in {elapsed_time:.2f} seconds")
+        # Determine operating mode
+        engine_mode = self._determine_mode(mode)
         
-        return response
-    
-    def _prepare_context(
-        self,
-        query: str,
-        context: Optional[Dict[str, Any]] = None,
-        reasoning_path: Optional[List[Dict[str, Any]]] = None,
-        memory_results: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
-        """Prepare enhanced context with reasoning and memory"""
-        enhanced_context = context or {}
+        # Log session start
+        logger.info(f"Starting query processing - Session: {session_id}, Mode: {engine_mode.value}")
         
-        # Add reasoning path if available
-        if reasoning_path:
-            enhanced_context["reasoning"] = reasoning_path
-        
-        # Add memory results if available
-        if memory_results:
-            enhanced_context["memories"] = memory_results
-        
-        # Add query analysis
-        enhanced_context["query_analysis"] = self._analyze_query(query)
-        
-        return enhanced_context
-    
-    def _analyze_query(self, query: str) -> Dict[str, Any]:
-        """Analyze the query to determine its characteristics"""
-        # In a real implementation, this would use more sophisticated analysis
-        analysis = {
-            "length": len(query),
-            "contains_code": "```" in query or "def " in query or "function" in query,
-            "is_question": query.endswith("?") or query.lower().startswith("how") or query.lower().startswith("what"),
-            "topics": self._extract_topics(query),
-            "complexity": self._estimate_complexity(query)
-        }
-        return analysis
-    
-    def _extract_topics(self, text: str) -> List[str]:
-        """Extract main topics from text"""
-        # Simplified implementation
-        topics = []
-        if "code" in text.lower() or "programming" in text.lower():
-            topics.append("programming")
-        if "design" in text.lower() or "user" in text.lower():
-            topics.append("design")
-        if "data" in text.lower() or "analysis" in text.lower():
-            topics.append("data")
-        if "math" in text.lower() or "algorithm" in text.lower():
-            topics.append("algorithms")
-            
-        # Default topic if none detected
-        if not topics:
-            topics.append("general")
-            
-        return topics
-    
-    def _estimate_complexity(self, text: str) -> float:
-        """Estimate query complexity on a 0-1 scale"""
-        # Simplified implementation
-        length_factor = min(len(text) / 500, 1.0)
-        structure_factor = 0.5
-        if "```" in text:  # Contains code blocks
-            structure_factor += 0.3
-        if text.count("?") > 3:  # Multiple questions
-            structure_factor += 0.2
-            
-        complexity = (length_factor + structure_factor) / 2
-        return min(complexity, 1.0)
-    
-    def _generate_collaborative_response(
-        self,
-        query: str,
-        context: Dict[str, Any]
-    ) -> str:
-        """
-        Generate a collaborative response using multiple models
-        
-        In collaborative mode, models work together with their
-        outputs weighted according to their strengths
-        """
-        logger.info("Generating collaborative response")
-        
-        # Determine model weights based on query characteristics
-        self._adjust_model_weights(query, context)
-        
-        # Generate responses from each active model
-        model_responses = {}
-        for model in self.active_models:
-            response = self._query_model(model, query, context)
-            model_responses[model] = response
-        
-        # Combine responses according to weights
-        final_response = self._combine_responses(model_responses, self.model_weights)
-        
-        # Record model communication
-        self._record_model_communication(query, model_responses, final_response)
-        
-        return final_response
-    
-    def _generate_specialized_response(
-        self,
-        query: str,
-        context: Dict[str, Any]
-    ) -> str:
-        """
-        Generate a specialized response using the most appropriate model
-        
-        In specialized mode, the system selects the best model for the task
-        """
-        logger.info("Generating specialized response")
-        
-        # Select the most appropriate model for the query
-        best_model = self._select_best_model(query, context)
-        
-        # Generate response from the selected model
-        response = self._query_model(best_model, query, context)
-        
-        # Record the selected model
-        self.last_used_model = best_model
-        
-        return response
-    
-    def _generate_competitive_response(
-        self,
-        query: str,
-        context: Dict[str, Any]
-    ) -> str:
-        """
-        Generate a competitive response by selecting the best output
-        
-        In competitive mode, multiple models generate responses and
-        the best one is selected
-        """
-        logger.info("Generating competitive response")
-        
-        # Generate responses from each active model
-        model_responses = {}
-        for model in self.active_models:
-            response = self._query_model(model, query, context)
-            model_responses[model] = response
-        
-        # Evaluate responses and select the best one
-        best_model, best_response = self._evaluate_responses(model_responses, query, context)
-        
-        # Record the selected model
-        self.last_used_model = best_model
-        
-        return best_response
-    
-    def _generate_autonomous_response(
-        self,
-        query: str,
-        context: Dict[str, Any]
-    ) -> str:
-        """
-        Generate an autonomous response with models communicating to improve quality
-        
-        In autonomous mode, models can query each other when stuck or
-        requiring assistance
-        """
-        logger.info("Generating autonomous response")
-        
-        # Select initial model
-        current_model = self._select_best_model(query, context)
-        
-        # Generate initial response
-        response = self._query_model(current_model, query, context)
-        
-        # Check if the model is stuck or uncertain
-        if self._is_model_uncertain(response):
-            logger.info(f"Model {current_model} is uncertain, consulting other models")
-            
-            # Get alternative model
-            helper_model = self._get_alternative_model(current_model)
-            
-            # Formulate a question for the helper model
-            question = self._formulate_question(response)
-            
-            # Get answer from helper model
-            helper_context = {**context, "original_response": response}
-            helper_response = self._query_model(helper_model, question, helper_context)
-            
-            # Incorporate helper model's response
-            enhanced_response = self._enhance_with_helper_response(
-                response, helper_response, current_model, helper_model
-            )
-            
-            # Record model communication
-            self._record_model_communication(
-                question,
-                {current_model: response, helper_model: helper_response},
-                enhanced_response,
-                is_model_asking=True
-            )
-            
-            return enhanced_response
-        
-        return response
-    
-    def _adjust_model_weights(
-        self,
-        query: str,
-        context: Dict[str, Any]
-    ) -> None:
-        """Adjust model weights based on query characteristics"""
-        # Get query analysis
-        analysis = context.get("query_analysis", {})
-        
-        # Default weights
-        weights = {
-            ModelType.LLAMA3: 0.5,
-            ModelType.GEMMA3: 0.5
-        }
-        
-        # Adjust weights based on query content
-        if analysis.get("contains_code", False):
-            # Favor Llama3 for code generation
-            weights[ModelType.LLAMA3] = 0.7
-            weights[ModelType.GEMMA3] = 0.3
-        
-        topics = analysis.get("topics", [])
-        if "design" in topics or "user" in topics:
-            # Favor Gemma3 for design and user experience
-            weights[ModelType.LLAMA3] = 0.3
-            weights[ModelType.GEMMA3] = 0.7
-        
-        # Normalize weights
-        total = sum(weights.values())
-        self.model_weights = {model: weight/total for model, weight in weights.items()}
-    
-    def _select_best_model(
-        self,
-        query: str,
-        context: Dict[str, Any]
-    ) -> ModelType:
-        """Select the most appropriate model for the query"""
-        # Get query analysis
-        analysis = context.get("query_analysis", {})
-        
-        # For coding and technical tasks, prefer Llama3
-        if analysis.get("contains_code", False) or "algorithms" in analysis.get("topics", []):
-            return ModelType.LLAMA3
-        
-        # For design and user experience, prefer Gemma3
-        if "design" in analysis.get("topics", []):
-            return ModelType.GEMMA3
-        
-        # Default based on complexity
-        complexity = analysis.get("complexity", 0.5)
-        if complexity > 0.7:
-            return ModelType.LLAMA3
-        else:
-            return ModelType.GEMMA3
-    
-    def _query_model(
-        self,
-        model: ModelType,
-        query: str,
-        context: Dict[str, Any]
-    ) -> str:
-        """Query a specific model for a response"""
-        logger.info(f"Querying model: {model}")
-        
-        # In a real implementation, this would call the actual model
-        # For now, we simulate model responses
-        
-        if model == ModelType.LLAMA3:
-            # Llama3 tends to be more technical and structured
-            return self._simulate_llama3_response(query, context)
-        elif model == ModelType.GEMMA3:
-            # Gemma3 tends to be more creative and human-centered
-            return self._simulate_gemma3_response(query, context)
-        else:
-            return f"Response from {model} model (simulated)"
-    
-    def _simulate_llama3_response(self, query: str, context: Dict[str, Any]) -> str:
-        """Simulate a response from Llama3"""
-        # For development/testing only
-        topic = context.get("query_analysis", {}).get("topics", ["general"])[0]
-        
-        if topic == "programming":
-            return (
-                "Based on my analysis, there are several approaches to solve this problem:\n\n"
-                "1. We can implement a recursive algorithm with memoization to optimize performance\n"
-                "2. A dynamic programming solution would have O(n) time complexity\n"
-                "3. We can use a more efficient data structure like a hash map\n\n"
-                "Here's a code implementation:\n\n"
-                "```python\n"
-                "def solve_problem(data):\n"
-                "    # Initialize data structures\n"
-                "    result = {}\n"
-                "    \n"
-                "    # Process input data\n"
-                "    for item in data:\n"
-                "        # Implement solution logic\n"
-                "        result[item.id] = calculate_solution(item)\n"
-                "    \n"
-                "    return result\n"
-                "```\n\n"
-                "This solution handles edge cases and scales efficiently for large inputs."
-            )
-        elif topic == "design":
-            return (
-                "The system architecture should follow these principles:\n\n"
-                "1. Separation of concerns - each component has a single responsibility\n"
-                "2. Modularity - components can be replaced independently\n"
-                "3. Scalability - the system can handle increasing loads\n\n"
-                "I recommend a three-tier architecture:\n"
-                "- Presentation layer: handles user interaction\n"
-                "- Business logic layer: implements core functionality\n"
-                "- Data access layer: manages data persistence\n\n"
-                "This architecture supports both vertical and horizontal scaling."
-            )
-        else:
-            return (
-                "Based on a systematic analysis, there are three key factors to consider:\n\n"
-                "1. Performance implications - optimizing for computational efficiency\n"
-                "2. Scalability concerns - ensuring the solution grows with demand\n"
-                "3. Maintenance requirements - reducing technical debt\n\n"
-                "I recommend implementing a comprehensive testing strategy with unit, integration, and stress tests to validate the solution's performance characteristics."
-            )
-    
-    def _simulate_gemma3_response(self, query: str, context: Dict[str, Any]) -> str:
-        """Simulate a response from Gemma3"""
-        # For development/testing only
-        topic = context.get("query_analysis", {}).get("topics", ["general"])[0]
-        
-        if topic == "programming":
-            return (
-                "When thinking about this problem, let's focus on creating code that's not just functional, but also readable and maintainable.\n\n"
-                "Here's an approach that prioritizes clarity and user experience:\n\n"
-                "```python\n"
-                "def process_user_data(user_input):\n"
-                "    # First, validate the input to provide helpful error messages\n"
-                "    if not is_valid_input(user_input):\n"
-                "        return {\n"
-                "            'status': 'error',\n"
-                "            'message': 'Please provide valid input data',\n"
-                "            'suggestions': get_input_suggestions(user_input)\n"
-                "        }\n"
-                "    \n"
-                "    # Process the data with clear steps\n"
-                "    result = transform_data_for_user(user_input)\n"
-                "    \n"
-                "    return {\n"
-                "        'status': 'success',\n"
-                "        'data': result,\n"
-                "        'next_steps': suggest_next_actions(result)\n"
-                "    }\n"
-                "```\n\n"
-                "Notice how this approach focuses on guiding the user through the process, providing helpful feedback, and suggesting next steps."
-            )
-        elif topic == "design":
-            return (
-                "When designing this system, I think we should center the human experience at every touchpoint.\n\n"
-                "Here's a user-centered approach:\n\n"
-                "1. Start with empathy mapping to understand diverse user needs and contexts\n"
-                "2. Create intuitive interaction flows that reduce cognitive load\n"
-                "3. Design for inclusivity with accessible interfaces and clear language\n"
-                "4. Build in thoughtful feedback loops so users always know what's happening\n\n"
-                "The most successful systems don't just work well technically—they create meaningful and rewarding experiences for the people who use them."
-            )
-        else:
-            return (
-                "I believe we should approach this question by considering both the practical implications and the human impact.\n\n"
-                "Here's a balanced perspective:\n\n"
-                "1. Consider the diverse contexts in which people will engage with this solution\n"
-                "2. Balance innovation with familiarity to create intuitive experiences\n"
-                "3. Build in flexibility to accommodate different user preferences and needs\n\n"
-                "I'd suggest starting with small, focused experiments to gather real-world feedback before scaling the solution. This helps ensure we're creating something that truly works for the people who will use it."
-            )
-    
-    def _combine_responses(
-        self,
-        model_responses: Dict[ModelType, str],
-        weights: Dict[ModelType, float]
-    ) -> str:
-        """
-        Combine responses from multiple models according to weights
-        
-        In a production system, this would use sophisticated techniques for
-        combining text. For now, we use a simple approach.
-        """
-        # For development/testing only
-        # In a real system, we would combine content more intelligently
-        
-        # Get the two main models
-        llama_response = model_responses.get(ModelType.LLAMA3, "")
-        gemma_response = model_responses.get(ModelType.GEMMA3, "")
-        
-        llama_weight = weights.get(ModelType.LLAMA3, 0.5)
-        gemma_weight = weights.get(ModelType.GEMMA3, 0.5)
-        
-        # Determine which model contributes more
-        if llama_weight > gemma_weight:
-            primary_model = ModelType.LLAMA3
-            primary_response = llama_response
-            secondary_response = gemma_response
-            primary_weight = llama_weight
-            secondary_weight = gemma_weight
-        else:
-            primary_model = ModelType.GEMMA3
-            primary_response = gemma_response
-            secondary_response = llama_response
-            primary_weight = gemma_weight
-            secondary_weight = llama_weight
-        
-        # If one model is strongly favored, just use its response
-        if primary_weight > 0.8:
-            return primary_response
-        
-        # Otherwise, create a combined response
-        return (
-            f"Based on my analysis, I can provide both technical insights and user-centered perspectives:\n\n"
-            f"{self._extract_key_points(primary_response, 3)}\n\n"
-            f"Additionally, considering human factors:\n\n"
-            f"{self._extract_key_points(secondary_response, 2)}\n\n"
-            f"Combining these approaches provides a comprehensive solution that addresses both technical requirements and user needs."
-        )
-    
-    def _extract_key_points(self, text: str, num_points: int) -> str:
-        """Extract key points from text"""
-        # Simplified implementation - in a real system, we would use NLP
-        lines = text.split("\n")
-        key_points = []
-        
-        for line in lines:
-            line = line.strip()
-            if line and len(line) > 20 and not line.startswith("```"):
-                key_points.append(line)
-                if len(key_points) >= num_points:
-                    break
-        
-        return "\n".join(key_points)
-    
-    def _evaluate_responses(
-        self,
-        model_responses: Dict[ModelType, str],
-        query: str,
-        context: Dict[str, Any]
-    ) -> Tuple[ModelType, str]:
-        """
-        Evaluate responses from multiple models and select the best one
-        
-        In a production system, this would use sophisticated evaluation.
-        For now, we use a simpler approach.
-        """
-        # Simplified implementation
-        analysis = context.get("query_analysis", {})
-        
-        # Criteria based on query type
-        if analysis.get("contains_code", False):
-            # For code-related queries, prefer Llama3
-            return ModelType.LLAMA3, model_responses[ModelType.LLAMA3]
-        
-        if "design" in analysis.get("topics", []):
-            # For design-related queries, prefer Gemma3
-            return ModelType.GEMMA3, model_responses[ModelType.GEMMA3]
-        
-        # Default to the model with the longer, more detailed response
-        llama_response = model_responses.get(ModelType.LLAMA3, "")
-        gemma_response = model_responses.get(ModelType.GEMMA3, "")
-        
-        if len(llama_response) > len(gemma_response) * 1.2:
-            return ModelType.LLAMA3, llama_response
-        elif len(gemma_response) > len(llama_response) * 1.2:
-            return ModelType.GEMMA3, gemma_response
-        else:
-            # If lengths are similar, prefer Llama3 for more technical content
-            return ModelType.LLAMA3, llama_response
-    
-    def _is_model_uncertain(self, response: str) -> bool:
-        """Check if a model response indicates uncertainty"""
-        # Look for phrases indicating uncertainty
-        uncertainty_phrases = [
-            "I'm not sure",
-            "It's unclear",
-            "I don't have enough information",
-            "It's difficult to determine",
-            "I cannot provide",
-            "I'm uncertain"
-        ]
-        
-        for phrase in uncertainty_phrases:
-            if phrase.lower() in response.lower():
-                return True
-        
-        # Also check for multiple question marks, which can indicate uncertainty
-        if response.count("?") >= 3:
-            return True
-        
-        return False
-    
-    def _get_alternative_model(self, current_model: ModelType) -> ModelType:
-        """Get an alternative model to consult"""
-        if current_model == ModelType.LLAMA3:
-            return ModelType.GEMMA3
-        else:
-            return ModelType.LLAMA3
-    
-    def _formulate_question(self, response: str) -> str:
-        """Formulate a question for another model based on uncertain response"""
-        # Extract the uncertain part
-        uncertainty_phrases = [
-            "I'm not sure",
-            "It's unclear",
-            "I don't have enough information",
-            "It's difficult to determine",
-            "I cannot provide",
-            "I'm uncertain"
-        ]
-        
-        question_start = "Can you help with this question: "
-        
-        for phrase in uncertainty_phrases:
-            if phrase.lower() in response.lower():
-                # Find the sentence containing the phrase
-                sentences = response.split(". ")
-                for sentence in sentences:
-                    if phrase.lower() in sentence.lower():
-                        return f"{question_start}{sentence}?"
-        
-        # Default question if no specific uncertainty found
-        return f"{question_start}I'm having trouble with this response. Can you provide your perspective?"
-    
-    def _enhance_with_helper_response(
-        self,
-        original_response: str,
-        helper_response: str,
-        original_model: ModelType,
-        helper_model: ModelType
-    ) -> str:
-        """Enhance original response with helper model's insights"""
-        # In a real implementation, this would blend the responses more intelligently
-        enhanced_response = (
-            f"{original_response}\n\n"
-            f"I consulted with another perspective to provide additional insights:\n\n"
-            f"{helper_response}\n\n"
-            f"Combining these viewpoints provides a more comprehensive answer to your question."
-        )
-        
-        return enhanced_response
-    
-    def _record_model_communication(
-        self,
-        query: str,
-        model_responses: Dict[ModelType, str],
-        final_response: str,
-        is_model_asking: bool = False
-    ) -> None:
-        """Record model communication for analysis and improvement"""
-        communication_record = {
-            "timestamp": datetime.now().isoformat(),
-            "query": query,
-            "model_responses": {str(model): response for model, response in model_responses.items()},
-            "final_response": final_response,
-            "is_model_asking": is_model_asking
-        }
-        
-        self.communication_history.append(communication_record)
-        
-        # In a real implementation, this would be stored persistently
-        if len(self.communication_history) > 100:
-            # Keep only the most recent 100 records
-            self.communication_history = self.communication_history[-100:]
-    
-    def enhance_response_with_execution(
-        self,
-        original_response: str,
-        execution_results: Dict[str, Any]
-    ) -> str:
-        """Enhance a response with code execution results"""
-        enhanced_response = original_response
-        
-        # Add execution results
-        enhanced_response += "\n\n---\n\n**Execution Results:**\n\n"
-        
-        for block_id, result in execution_results.items():
-            success = result.get("success", False)
-            output = result.get("output", "")
-            error = result.get("error", "")
-            
-            enhanced_response += f"Block {block_id.split('_')[1]}:\n"
-            
-            if success:
-                enhanced_response += f"```\n{output}\n```\n\n"
+        # Process based on mode
+        try:
+            if engine_mode == AIEngineMode.COLLABORATIVE:
+                result = self._process_collaborative(query, context, settings, session_id)
+            elif engine_mode == AIEngineMode.SPECIALIZED:
+                result = self._process_specialized(query, context, settings, session_id)
+            elif engine_mode == AIEngineMode.COMPETITIVE:
+                result = self._process_competitive(query, context, settings, session_id)
             else:
-                enhanced_response += f"Error: {error}\n\n"
+                # Fallback to collaborative
+                result = self._process_collaborative(query, context, settings, session_id)
+            
+            # Calculate response time
+            end_time = time.time()
+            response_time = end_time - start_time
+            
+            # Update metrics
+            self.metrics["total_queries"] += 1
+            self.metrics["total_response_time"] += response_time
+            self.metrics["average_response_time"] = (
+                self.metrics["total_response_time"] / self.metrics["total_queries"]
+            )
+            self.metrics["mode_usage"][engine_mode.value] += 1
+            
+            # Add timing to result
+            result["processing_time"] = response_time
+            
+            logger.info(f"Query processing completed - Session: {session_id}, Time: {response_time:.2f}s")
+            
+            return result
         
-        return enhanced_response
+        except Exception as e:
+            logger.error(f"Error processing query: {str(e)}")
+            
+            # Prepare error response
+            error_response = {
+                "error": str(e),
+                "session_id": session_id,
+                "query": query,
+                "mode": engine_mode.value
+            }
+            
+            return error_response
+    
+    def _determine_mode(self, mode_str: Optional[str]) -> AIEngineMode:
+        """Determine the operating mode"""
+        if not mode_str:
+            return self.default_mode
+        
+        try:
+            return AIEngineMode(mode_str.lower())
+        except ValueError:
+            logger.warning(f"Invalid mode '{mode_str}', using default mode")
+            return self.default_mode
+    
+    def _process_collaborative(
+        self,
+        query: str,
+        context: Dict[str, Any],
+        settings: Dict[str, Any],
+        session_id: str
+    ) -> Dict[str, Any]:
+        """
+        Process query in collaborative mode
+        
+        In collaborative mode, models work together and share insights
+        to produce the best possible response.
+        """
+        # Step 1: Analyze the query with the reasoning engine
+        from ai_core.neurosymbolic_reasoning import NeuroSymbolicEngine, ReasoningStrategy
+        reasoning_engine = NeuroSymbolicEngine()
+        
+        reasoning_result = reasoning_engine.reason(
+            query=query,
+            context=context,
+            strategy=ReasoningStrategy.HYBRID
+        )
+        
+        # Extract reasoning path
+        reasoning_path = reasoning_result.get("reasoning_path", [])
+        
+        # Step 2: Use the Qwen model to generate initial understanding
+        from ai_core.model_communication import CommunicationSystem, ModelType as CommModelType, MessageType
+        communication_system = CommunicationSystem()
+        
+        # Create a conversation for this session
+        conversation_id = communication_system.create_conversation(
+            topic=f"Collaborative processing of: {query[:50]}...",
+            context={
+                "query": query,
+                "full_context": context,
+                "session_id": session_id
+            }
+        )
+        
+        # First, let Qwen understand the query
+        qwen_message = communication_system.ask_question(
+            from_model=CommModelType.SYSTEM,
+            to_model=CommModelType.QWEN,
+            content=f"Analyze this query and provide your understanding: {query}",
+            context=context,
+            conversation_id=conversation_id
+        )
+        
+        # Simulate Qwen response (in a real implementation, this would call the actual model)
+        qwen_response = self._simulate_model_response(
+            CommModelType.QWEN,
+            query,
+            context,
+            "Understanding the query and its requirements"
+        )
+        
+        # Register the response
+        communication_system.answer_question(
+            question_id=qwen_message["id"],
+            content=qwen_response
+        )
+        
+        # Step 3: Let Olympic model build upon Qwen's understanding
+        olympic_message = communication_system.ask_question(
+            from_model=CommModelType.SYSTEM,
+            to_model=CommModelType.OLYMPIC,
+            content=f"Based on Qwen's understanding '{qwen_response}', generate a solution approach for: {query}",
+            context=context,
+            conversation_id=conversation_id
+        )
+        
+        # Simulate Olympic response
+        olympic_response = self._simulate_model_response(
+            CommModelType.OLYMPIC,
+            query,
+            context,
+            "Generating solution approach based on understanding"
+        )
+        
+        # Register the response
+        communication_system.answer_question(
+            question_id=olympic_message["id"],
+            content=olympic_response
+        )
+        
+        # Step 4: Have Qwen review and enhance Olympic's approach
+        qwen_review_message = communication_system.ask_question(
+            from_model=CommModelType.SYSTEM,
+            to_model=CommModelType.QWEN,
+            content=f"Review and enhance Olympic's solution approach: '{olympic_response}'",
+            context=context,
+            conversation_id=conversation_id
+        )
+        
+        # Simulate Qwen review response
+        qwen_review_response = self._simulate_model_response(
+            CommModelType.QWEN,
+            olympic_response,
+            context,
+            "Reviewing and enhancing the solution approach"
+        )
+        
+        # Register the response
+        communication_system.answer_question(
+            question_id=qwen_review_message["id"],
+            content=qwen_review_response
+        )
+        
+        # Step 5: Let Olympic finalize the solution
+        olympic_final_message = communication_system.ask_question(
+            from_model=CommModelType.SYSTEM,
+            to_model=CommModelType.OLYMPIC,
+            content=f"Finalize the solution based on Qwen's review: '{qwen_review_response}'",
+            context=context,
+            conversation_id=conversation_id
+        )
+        
+        # Simulate Olympic final response
+        olympic_final_response = self._simulate_model_response(
+            CommModelType.OLYMPIC,
+            qwen_review_response,
+            context,
+            "Finalizing the solution"
+        )
+        
+        # Register the response
+        communication_system.answer_question(
+            question_id=olympic_final_message["id"],
+            content=olympic_final_response
+        )
+        
+        # Step 6: Combined final response
+        final_response = f"{olympic_final_response}\n\nThis solution was developed collaboratively by Qwen and Olympic."
+        
+        # Update model usage metrics
+        self.metrics["model_usage"][CommModelType.QWEN.value] += 1
+        self.metrics["model_usage"][CommModelType.OLYMPIC.value] += 1
+        
+        return {
+            "response": final_response,
+            "reasoning_path": reasoning_path,
+            "models_used": [CommModelType.QWEN.value, CommModelType.OLYMPIC.value],
+            "conversation_id": conversation_id,
+            "metadata": {
+                "mode": AIEngineMode.COLLABORATIVE.value,
+                "session_id": session_id,
+                "confidence": reasoning_result.get("confidence", 0.8)
+            }
+        }
+    
+    def _process_specialized(
+        self,
+        query: str,
+        context: Dict[str, Any],
+        settings: Dict[str, Any],
+        session_id: str
+    ) -> Dict[str, Any]:
+        """
+        Process query in specialized mode
+        
+        In specialized mode, each model focuses on what it does best:
+        - Qwen handles general understanding and reasoning
+        - Olympic focuses on code generation and technical implementation
+        """
+        # Step 1: Analyze the query with the reasoning engine
+        from ai_core.neurosymbolic_reasoning import NeuroSymbolicEngine, ReasoningStrategy
+        reasoning_engine = NeuroSymbolicEngine()
+        
+        reasoning_result = reasoning_engine.reason(
+            query=query,
+            context=context,
+            strategy=ReasoningStrategy.DEDUCTIVE  # More structured approach for specialization
+        )
+        
+        # Extract reasoning path
+        reasoning_path = reasoning_result.get("reasoning_path", [])
+        
+        # Step 2: Determine which model is most appropriate for this query
+        query_type = self._analyze_query_type(query, context)
+        
+        # Step 3: Use the appropriate model
+        from ai_core.model_communication import CommunicationSystem, ModelType as CommModelType, MessageType
+        communication_system = CommunicationSystem()
+        
+        # Create a conversation for this session
+        conversation_id = communication_system.create_conversation(
+            topic=f"Specialized processing of: {query[:50]}...",
+            context={
+                "query": query,
+                "query_type": query_type,
+                "full_context": context,
+                "session_id": session_id
+            }
+        )
+        
+        if query_type in ["code_generation", "debugging", "technical_implementation"]:
+            # Use Olympic for code-related tasks
+            primary_model = CommModelType.OLYMPIC
+            primary_model_name = "Olympic"
+            support_model = CommModelType.QWEN
+            
+            # First, get high-level understanding from Qwen
+            support_message = communication_system.ask_question(
+                from_model=CommModelType.SYSTEM,
+                to_model=support_model,
+                content=f"Provide high-level requirements and considerations for this task: {query}",
+                context=context,
+                conversation_id=conversation_id
+            )
+            
+            # Simulate support model response
+            support_response = self._simulate_model_response(
+                support_model,
+                query,
+                context,
+                "Providing high-level requirements and considerations"
+            )
+            
+            # Register the response
+            communication_system.answer_question(
+                question_id=support_message["id"],
+                content=support_response
+            )
+            
+            # Then, let the primary model handle the technical implementation
+            primary_message = communication_system.ask_question(
+                from_model=CommModelType.SYSTEM,
+                to_model=primary_model,
+                content=f"Based on these requirements: '{support_response}', implement a solution for: {query}",
+                context=context,
+                conversation_id=conversation_id
+            )
+            
+            # Simulate primary model response
+            primary_response = self._simulate_model_response(
+                primary_model,
+                support_response + "\n" + query,
+                context,
+                "Implementing technical solution"
+            )
+            
+            # Register the response
+            communication_system.answer_question(
+                question_id=primary_message["id"],
+                content=primary_response
+            )
+            
+        else:
+            # Use Qwen for reasoning, explanation, and non-code tasks
+            primary_model = CommModelType.QWEN
+            primary_model_name = "Qwen"
+            support_model = CommModelType.OLYMPIC
+            
+            # First, get technical considerations from Olympic
+            support_message = communication_system.ask_question(
+                from_model=CommModelType.SYSTEM,
+                to_model=support_model,
+                content=f"Provide technical considerations for this query: {query}",
+                context=context,
+                conversation_id=conversation_id
+            )
+            
+            # Simulate support model response
+            support_response = self._simulate_model_response(
+                support_model,
+                query,
+                context,
+                "Providing technical considerations"
+            )
+            
+            # Register the response
+            communication_system.answer_question(
+                question_id=support_message["id"],
+                content=support_response
+            )
+            
+            # Then, let the primary model create the detailed explanation
+            primary_message = communication_system.ask_question(
+                from_model=CommModelType.SYSTEM,
+                to_model=primary_model,
+                content=f"Considering these technical aspects: '{support_response}', provide a comprehensive response to: {query}",
+                context=context,
+                conversation_id=conversation_id
+            )
+            
+            # Simulate primary model response
+            primary_response = self._simulate_model_response(
+                primary_model,
+                support_response + "\n" + query,
+                context,
+                "Creating comprehensive response"
+            )
+            
+            # Register the response
+            communication_system.answer_question(
+                question_id=primary_message["id"],
+                content=primary_response
+            )
+        
+        # Final response
+        final_response = f"{primary_response}\n\nThis solution was developed by {primary_model_name}, specialized in {query_type} tasks."
+        
+        # Update model usage metrics
+        self.metrics["model_usage"][primary_model.value] += 1
+        self.metrics["model_usage"][support_model.value] += 1
+        
+        return {
+            "response": final_response,
+            "reasoning_path": reasoning_path,
+            "models_used": [primary_model.value, support_model.value],
+            "conversation_id": conversation_id,
+            "metadata": {
+                "mode": AIEngineMode.SPECIALIZED.value,
+                "primary_model": primary_model.value,
+                "query_type": query_type,
+                "session_id": session_id,
+                "confidence": reasoning_result.get("confidence", 0.8)
+            }
+        }
+    
+    def _process_competitive(
+        self,
+        query: str,
+        context: Dict[str, Any],
+        settings: Dict[str, Any],
+        session_id: str
+    ) -> Dict[str, Any]:
+        """
+        Process query in competitive mode
+        
+        In competitive mode, models independently generate solutions,
+        and the best solution is selected or they are combined.
+        """
+        # Step 1: Analyze the query with the reasoning engine
+        from ai_core.neurosymbolic_reasoning import NeuroSymbolicEngine, ReasoningStrategy
+        reasoning_engine = NeuroSymbolicEngine()
+        
+        reasoning_result = reasoning_engine.reason(
+            query=query,
+            context=context,
+            strategy=ReasoningStrategy.ABDUCTIVE  # Better for generating hypotheses
+        )
+        
+        # Extract reasoning path
+        reasoning_path = reasoning_result.get("reasoning_path", [])
+        
+        # Step 2: Let both models generate solutions independently
+        from ai_core.model_communication import CommunicationSystem, ModelType as CommModelType, MessageType
+        communication_system = CommunicationSystem()
+        
+        # Create a conversation for this session
+        conversation_id = communication_system.create_conversation(
+            topic=f"Competitive processing of: {query[:50]}...",
+            context={
+                "query": query,
+                "full_context": context,
+                "session_id": session_id
+            }
+        )
+        
+        # Get solution from Qwen
+        qwen_message = communication_system.ask_question(
+            from_model=CommModelType.SYSTEM,
+            to_model=CommModelType.QWEN,
+            content=f"Generate your best solution for this query: {query}",
+            context=context,
+            conversation_id=conversation_id
+        )
+        
+        # Simulate Qwen response
+        qwen_response = self._simulate_model_response(
+            CommModelType.QWEN,
+            query,
+            context,
+            "Generating comprehensive solution"
+        )
+        
+        # Register the response
+        communication_system.answer_question(
+            question_id=qwen_message["id"],
+            content=qwen_response
+        )
+        
+        # Get solution from Olympic
+        olympic_message = communication_system.ask_question(
+            from_model=CommModelType.SYSTEM,
+            to_model=CommModelType.OLYMPIC,
+            content=f"Generate your best solution for this query: {query}",
+            context=context,
+            conversation_id=conversation_id
+        )
+        
+        # Simulate Olympic response
+        olympic_response = self._simulate_model_response(
+            CommModelType.OLYMPIC,
+            query,
+            context,
+            "Generating technical solution"
+        )
+        
+        # Register the response
+        communication_system.answer_question(
+            question_id=olympic_message["id"],
+            content=olympic_response
+        )
+        
+        # Step 3: Have the reasoning engine evaluate both solutions
+        evaluation_result = reasoning_engine.reason(
+            query=f"Evaluate these two solutions for the query '{query}':\n\nQwen solution: {qwen_response}\n\nOlympic solution: {olympic_response}",
+            context={
+                "query": query,
+                "qwen_solution": qwen_response,
+                "olympic_solution": olympic_response,
+                **context
+            },
+            strategy=ReasoningStrategy.BAYESIAN  # Good for probabilistic judgments
+        )
+        
+        # Extract the evaluation
+        evaluation = evaluation_result.get("answer", "Both solutions have merit.")
+        confidence_qwen = 0.5
+        confidence_olympic = 0.5
+        
+        # Parse the evaluation to determine confidence scores
+        if "qwen" in evaluation.lower() and "better" in evaluation.lower():
+            confidence_qwen = 0.7
+            confidence_olympic = 0.3
+        elif "olympic" in evaluation.lower() and "better" in evaluation.lower():
+            confidence_qwen = 0.3
+            confidence_olympic = 0.7
+        
+        # Step 4: Generate combined solution
+        combined_message = communication_system.ask_question(
+            from_model=CommModelType.SYSTEM,
+            to_model=CommModelType.HYBRID,
+            content=f"Combine these solutions based on the evaluation '{evaluation}':\n\nQwen solution: {qwen_response}\n\nOlympic solution: {olympic_response}",
+            context=context,
+            conversation_id=conversation_id
+        )
+        
+        # Simulate combined response
+        combined_response = f"""
+Based on both models' approaches:
+
+{qwen_response if confidence_qwen > confidence_olympic else olympic_response}
+
+Additional insights from the {confidence_qwen < confidence_olympic and 'Qwen' or 'Olympic'} approach:
+{self._extract_key_insights(confidence_qwen < confidence_olympic and qwen_response or olympic_response)}
+
+This solution combines the strengths of both Qwen and Olympic models.
+"""
+        
+        # Register the response
+        communication_system.answer_question(
+            question_id=combined_message["id"],
+            content=combined_response
+        )
+        
+        # Update model usage metrics
+        self.metrics["model_usage"][CommModelType.QWEN.value] += 1
+        self.metrics["model_usage"][CommModelType.OLYMPIC.value] += 1
+        self.metrics["model_usage"][CommModelType.HYBRID.value] += 1
+        
+        return {
+            "response": combined_response,
+            "reasoning_path": reasoning_path,
+            "models_used": [CommModelType.QWEN.value, CommModelType.OLYMPIC.value, CommModelType.HYBRID.value],
+            "conversation_id": conversation_id,
+            "metadata": {
+                "mode": AIEngineMode.COMPETITIVE.value,
+                "session_id": session_id,
+                "evaluation": evaluation,
+                "confidence_qwen": confidence_qwen,
+                "confidence_olympic": confidence_olympic,
+                "confidence": max(confidence_qwen, confidence_olympic)
+            }
+        }
+    
+    def generate_code(
+        self,
+        description: str,
+        language: str = "python",
+        existing_code: Optional[str] = None,
+        requirements: Optional[List[str]] = None,
+        generate_tests: bool = True,
+        mode: str = "collaborative"
+    ) -> Dict[str, Any]:
+        """
+        Generate code based on a description
+        
+        Args:
+            description: Description of the code to generate
+            language: Programming language to use
+            existing_code: Existing code to modify/extend
+            requirements: Specific requirements for the code
+            generate_tests: Whether to generate tests
+            mode: Operating mode for code generation
+            
+        Returns:
+            Generated code and metadata
+        """
+        # Create a context with all the necessary information
+        context = {
+            "language": language,
+            "existing_code": existing_code,
+            "requirements": requirements or [],
+            "generate_tests": generate_tests
+        }
+        
+        # Format the query
+        query = f"Generate {language} code for: {description}"
+        if existing_code:
+            query += f"\n\nBased on this existing code:\n```{language}\n{existing_code}\n```"
+        if requirements:
+            query += f"\n\nRequirements:\n" + "\n".join([f"- {req}" for req in requirements])
+        if generate_tests:
+            query += "\n\nInclude tests for the code."
+        
+        # Process with the AI engine using the appropriate mode
+        result = self.process_query(query, mode, context)
+        
+        # Extract code blocks from the response
+        code = self._extract_code_blocks(result.get("response", ""), language)
+        
+        # Extract tests if requested
+        tests = None
+        if generate_tests:
+            tests = self._extract_test_blocks(result.get("response", ""), language)
+        
+        # Get explanation
+        explanation = self._extract_explanation(result.get("response", ""))
+        
+        return {
+            "code": code,
+            "explanation": explanation,
+            "tests": tests,
+            "reasoning_path": result.get("reasoning_path"),
+            "models_used": result.get("models_used", [])
+        }
+    
+    def debug_code(
+        self,
+        code: str,
+        language: str,
+        error: Optional[str] = None,
+        expected_behavior: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Debug code and fix issues
+        
+        Args:
+            code: Code to debug
+            language: Programming language
+            error: Error message if available
+            expected_behavior: Description of expected behavior
+            context: Additional context for debugging
+            
+        Returns:
+            Fixed code and debugging information
+        """
+        # Create a context with all the necessary information
+        context_dict = context or {}
+        context_dict.update({
+            "language": language,
+            "code": code,
+            "error": error,
+            "expected_behavior": expected_behavior
+        })
+        
+        # Format the query
+        query = f"Debug and fix the following {language} code:\n```{language}\n{code}\n```"
+        if error:
+            query += f"\n\nError message:\n```\n{error}\n```"
+        if expected_behavior:
+            query += f"\n\nExpected behavior: {expected_behavior}"
+        
+        # Process with the AI engine in specialized mode (better for debugging)
+        result = self.process_query(query, "specialized", context_dict)
+        
+        # Extract fixed code from the response
+        fixed_code = self._extract_code_blocks(result.get("response", ""), language)
+        
+        # Get explanation
+        explanation = self._extract_explanation(result.get("response", ""))
+        
+        # Extract root cause and changes made
+        root_cause, changes_made = self._extract_debugging_info(result.get("response", ""))
+        
+        return {
+            "fixed_code": fixed_code,
+            "explanation": explanation,
+            "root_cause": root_cause,
+            "changes_made": changes_made,
+            "reasoning_path": result.get("reasoning_path")
+        }
+    
+    def design_architecture(
+        self,
+        description: str,
+        requirements: List[str],
+        constraints: Optional[List[str]] = None,
+        technologies: Optional[List[str]] = None,
+        scale: Optional[str] = "medium"
+    ) -> Dict[str, Any]:
+        """
+        Design software architecture
+        
+        Args:
+            description: Description of the system to design
+            requirements: System requirements
+            constraints: System constraints
+            technologies: Technologies to use
+            scale: Scale of the system (small, medium, large, enterprise)
+            
+        Returns:
+            Architecture design and metadata
+        """
+        # Create a context with all the necessary information
+        context = {
+            "requirements": requirements,
+            "constraints": constraints or [],
+            "technologies": technologies or [],
+            "scale": scale
+        }
+        
+        # Format the query
+        query = f"Design software architecture for: {description}"
+        query += f"\n\nRequirements:\n" + "\n".join([f"- {req}" for req in requirements])
+        if constraints:
+            query += f"\n\nConstraints:\n" + "\n".join([f"- {con}" for con in constraints])
+        if technologies:
+            query += f"\n\nTechnologies to use:\n" + "\n".join([f"- {tech}" for tech in technologies])
+        query += f"\n\nSystem scale: {scale}"
+        
+        # Process with the AI engine in collaborative mode (better for architecture)
+        result = self.process_query(query, "collaborative", context)
+        
+        # Extract design from the response
+        design = result.get("response", "")
+        
+        # Extract diagram code (if any)
+        diagram_code = self._extract_diagram_code(design)
+        
+        # Extract components list
+        components = self._extract_components(design)
+        
+        # Extract justification
+        justification = self._extract_justification(design)
+        
+        # Extract alternatives considered
+        alternatives = self._extract_alternatives(design)
+        
+        return {
+            "design": design,
+            "diagram_code": diagram_code,
+            "components": components,
+            "justification": justification,
+            "alternatives_considered": alternatives,
+            "reasoning_path": result.get("reasoning_path")
+        }
     
     def get_status(self) -> Dict[str, Any]:
-        """Get basic status information"""
+        """Get the status of the AI engine"""
         return {
-            "status": self.status,
-            "active_models": [str(model) for model in self.active_models],
-            "last_used_model": str(self.last_used_model) if self.last_used_model else None
+            "operational": True,
+            "models": {model.value: state for model, state in self.models.items()},
+            "default_mode": self.default_mode.value,
+            "metrics": {
+                "total_queries": self.metrics["total_queries"],
+                "average_response_time": self.metrics["average_response_time"],
+                "model_usage": self.metrics["model_usage"],
+                "mode_usage": self.metrics["mode_usage"]
+            }
         }
     
-    def get_detailed_status(self) -> Dict[str, Any]:
-        """Get detailed status information"""
-        return {
-            "status": self.status,
-            "active_models": [str(model) for model in self.active_models],
-            "model_weights": {str(model): weight for model, weight in self.model_weights.items()},
-            "models": {str(model): info for model, info in self.models.items()},
-            "communication_records": len(self.communication_history),
-            "last_used_model": str(self.last_used_model) if self.last_used_model else None,
-            "config": self.config
-        }
+    # Helper methods
+    
+    def _analyze_query_type(self, query: str, context: Dict[str, Any]) -> str:
+        """Analyze the query to determine its type"""
+        query_lower = query.lower()
+        
+        # Check for code generation keywords
+        if any(term in query_lower for term in ["generate code", "write code", "create code", "implement", "function", "class", "coding"]):
+            return "code_generation"
+        
+        # Check for debugging keywords
+        if any(term in query_lower for term in ["debug", "fix", "error", "bug", "issue", "not working", "fails"]):
+            return "debugging"
+        
+        # Check for architecture keywords
+        if any(term in query_lower for term in ["architecture", "design", "system design", "structure", "component"]):
+            return "architecture"
+        
+        # Check for explanation keywords
+        if any(term in query_lower for term in ["explain", "clarify", "describe", "what is", "how does"]):
+            return "explanation"
+        
+        # Check for technical implementation
+        if any(term in query_lower for term in ["algorithm", "data structure", "optimization", "efficient", "perform"]):
+            return "technical_implementation"
+        
+        # Default to general query
+        return "general"
+    
+    def _simulate_model_response(
+        self,
+        model_type: Any,  # Using Any to avoid circular imports
+        query: str,
+        context: Dict[str, Any],
+        task_description: str
+    ) -> str:
+        """
+        Simulate a response from a model
+        
+        Note: In a real implementation, this would call the actual AI models.
+        This is a placeholder that creates a response template.
+        """
+        model_name = model_type.value.capitalize()
+        
+        # Generate a placeholder response based on model type
+        if model_name.lower() == "qwen":
+            return f"[Qwen model response for {task_description}: This would involve a detailed analysis of the requirements, consideration of broader context, and explanation of concepts. The response would be comprehensive and well-explained, with attention to implications and alternatives.]"
+        
+        elif model_name.lower() == "olympic":
+            return f"[Olympic model response for {task_description}: This would involve specific technical implementation details, efficient code structures, and focused problem-solving. The response would be practical and optimized, with emphasis on implementation best practices.]"
+        
+        elif model_name.lower() == "hybrid":
+            return f"[Hybrid model response for {task_description}: This would combine the comprehensive analysis of Qwen with the technical precision of Olympic, resulting in a solution that is both well-explained and efficiently implemented.]"
+        
+        else:
+            return f"[Model response for {task_description}: Generic response placeholder.]"
+    
+    def _extract_code_blocks(self, text: str, language: str) -> str:
+        """Extract code blocks from text"""
+        # This is a simplified implementation that would be more sophisticated in production
+        import re
+        pattern = rf"```(?:{language})?\n(.*?)```"
+        matches = re.findall(pattern, text, re.DOTALL)
+        
+        if matches:
+            return matches[0]
+        
+        # Fallback: try without language specifier
+        pattern = r"```\n(.*?)```"
+        matches = re.findall(pattern, text, re.DOTALL)
+        
+        if matches:
+            return matches[0]
+        
+        # If no code blocks found, return empty string
+        return ""
+    
+    def _extract_test_blocks(self, text: str, language: str) -> Optional[str]:
+        """Extract test code blocks from text"""
+        # Look for test code blocks
+        import re
+        patterns = [
+            rf"```(?:{language})?.*?test.*?\n(.*?)```",
+            r"```.*?test.*?\n(.*?)```",
+            rf"# Tests\n```(?:{language})?\n(.*?)```",
+            r"# Tests\n```\n(.*?)```"
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, text, re.DOTALL | re.IGNORECASE)
+            if matches:
+                return matches[0]
+        
+        return None
+    
+    def _extract_explanation(self, text: str) -> str:
+        """Extract explanation from text"""
+        # Remove code blocks to get the explanation
+        import re
+        
+        # Remove code blocks
+        text_without_code = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+        
+        # Clean up the text
+        explanation = text_without_code.strip()
+        
+        return explanation
+    
+    def _extract_debugging_info(self, text: str) -> Tuple[str, List[str]]:
+        """Extract debugging information from text"""
+        # Look for root cause information
+        import re
+        
+        # Default values
+        root_cause = "Unspecified issue"
+        changes_made = []
+        
+        # Try to extract root cause
+        root_cause_patterns = [
+            r"(?:root cause|main issue|problem)(?:\s+is|:)\s+(.*?)(?:\n\n|\n[A-Z])",
+            r"(?:root cause|main issue|problem).*?(?:\n|:)\s+(.*?)(?:\n\n|\n[A-Z])"
+        ]
+        
+        for pattern in root_cause_patterns:
+            matches = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+            if matches:
+                root_cause = matches.group(1).strip()
+                break
+        
+        # Try to extract changes made
+        changes_patterns = [
+            r"(?:changes made|modifications|fixes)(?:\s+are|:)((?:\n\s*-.*)+)",
+            r"(?:changes made|modifications|fixes).*?(?:\n|:)((?:\n\s*-.*)+)"
+        ]
+        
+        for pattern in changes_patterns:
+            matches = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+            if matches:
+                changes_text = matches.group(1)
+                changes_made = [change.strip() for change in re.findall(r"\n\s*-\s*(.*)", changes_text)]
+                break
+        
+        # If no changes found, try another approach
+        if not changes_made:
+            # Look for paragraphs that mention changes
+            paragraphs = re.split(r"\n\n+", text)
+            for paragraph in paragraphs:
+                if re.search(r"(?:chang|modif|fix|updat)", paragraph, re.IGNORECASE):
+                    changes_made.append(paragraph.strip())
+        
+        return root_cause, changes_made
+    
+    def _extract_diagram_code(self, text: str) -> Optional[str]:
+        """Extract diagram code from text"""
+        import re
+        
+        # Look for diagram code blocks
+        patterns = [
+            r"```(?:mermaid|plantuml|dot)\n(.*?)```",
+            r"```\n((?:graph |classDiagram|sequenceDiagram|flowchart ).*?)```"
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, text, re.DOTALL)
+            if matches:
+                return matches[0]
+        
+        return None
+    
+    def _extract_components(self, text: str) -> List[Dict[str, Any]]:
+        """Extract components list from architecture design"""
+        import re
+        
+        components = []
+        
+        # Look for components section
+        components_section_match = re.search(
+            r"(?:components|system components|architecture components)(?:\s+are|:)(.*?)(?:\n\n|\n#|\Z)",
+            text,
+            re.DOTALL | re.IGNORECASE
+        )
+        
+        if components_section_match:
+            components_text = components_section_match.group(1)
+            
+            # Extract component items
+            component_items = re.findall(r"\n\s*(?:-|\d+\.)\s*(.*?)(?:\n\s*(?:-|\d+\.)|$)", components_text, re.DOTALL)
+            
+            for item in component_items:
+                # Try to parse name and description
+                name_match = re.search(r"(.*?)(?::|-)(?:\s*)(.*)", item)
+                if name_match:
+                    name = name_match.group(1).strip()
+                    description = name_match.group(2).strip()
+                else:
+                    # If no colon or dash, use the whole item as name
+                    name = item.strip()
+                    description = ""
+                
+                components.append({
+                    "name": name,
+                    "description": description
+                })
+        
+        # If no components found, return empty list
+        return components
+    
+    def _extract_justification(self, text: str) -> str:
+        """Extract justification from architecture design"""
+        import re
+        
+        # Look for justification section
+        justification_match = re.search(
+            r"(?:justification|rationale|design reasoning)(?:\s+is|:)(.*?)(?:\n\n|\n#|\Z)",
+            text,
+            re.DOTALL | re.IGNORECASE
+        )
+        
+        if justification_match:
+            return justification_match.group(1).strip()
+        
+        # If no specific justification section, look for sentences that explain the design
+        sentences = re.findall(r"[^.!?]*(?:why|because|reason|therefore|hence|this design)[^.!?]*[.!?]", text, re.IGNORECASE)
+        if sentences:
+            return " ".join(sentences)
+        
+        # Default justification
+        return "Design based on requirements and best practices."
+    
+    def _extract_alternatives(self, text: str) -> List[str]:
+        """Extract alternatives considered from architecture design"""
+        import re
+        
+        alternatives = []
+        
+        # Look for alternatives section
+        alternatives_match = re.search(
+            r"(?:alternatives|alternative approaches|other options)(?:\s+considered|:)(.*?)(?:\n\n|\n#|\Z)",
+            text,
+            re.DOTALL | re.IGNORECASE
+        )
+        
+        if alternatives_match:
+            alternatives_text = alternatives_match.group(1)
+            
+            # Extract alternative items
+            alternative_items = re.findall(r"\n\s*(?:-|\d+\.)\s*(.*?)(?:\n\s*(?:-|\d+\.)|$)", alternatives_text, re.DOTALL)
+            
+            alternatives = [item.strip() for item in alternative_items]
+        
+        return alternatives
+    
+    def _extract_key_insights(self, text: str) -> str:
+        """Extract key insights from a model's response"""
+        # This is a simplified implementation
+        import re
+        
+        # Try to find the most important sentences
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        
+        # Look for sentences with important keywords
+        important_sentences = []
+        for sentence in sentences:
+            if re.search(r'\b(important|key|critical|significant|essential|crucial|notably)\b', sentence, re.IGNORECASE):
+                important_sentences.append(sentence)
+        
+        # If we found important sentences, use them
+        if important_sentences:
+            return " ".join(important_sentences)
+        
+        # Otherwise, just take a few sentences from the middle
+        if len(sentences) > 5:
+            middle_index = len(sentences) // 2
+            return " ".join(sentences[middle_index-1:middle_index+2])
+        
+        # If text is very short, return it as is
+        return text
+
+# Initialize AI engine
+ai_engine = AIEngine()

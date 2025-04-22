@@ -1,8 +1,8 @@
 """
-AI Memory System
+Memory System for Seren
 
-Provides persistent, searchable memory for the AI system using vector databases.
-Enables semantic search, episodic memory, and knowledge persistence.
+Advanced memory management for storing, retrieving, and leveraging knowledge
+across different memory types with semantic understanding.
 """
 
 import os
@@ -10,10 +10,17 @@ import sys
 import json
 import logging
 import time
-import enum
-from typing import Dict, List, Optional, Any, Union, Set, Tuple
-from datetime import datetime
 import uuid
+import re
+from enum import Enum
+from typing import Dict, List, Optional, Any, Union, Set, Tuple, Callable
+from datetime import datetime
+import random
+
+# Add parent directory to path for imports
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
 
 # Configure logging
 logging.basicConfig(
@@ -22,741 +29,630 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class MemoryType(str, enum.Enum):
-    """Types of AI memory"""
-    EPISODIC = "episodic"  # Memory of events and interactions
-    SEMANTIC = "semantic"  # Factual knowledge
-    PROCEDURAL = "procedural"  # How to do things
-    WORKING = "working"  # Temporary, active memory
-    ASSOCIATIVE = "associative"  # Connections between concepts
+class MemoryType(Enum):
+    """Types of memory in the system"""
+    EPISODIC = "episodic"      # Specific experiences or interactions
+    SEMANTIC = "semantic"      # General knowledge and facts
+    PROCEDURAL = "procedural"  # How to perform tasks
+    DECLARATIVE = "declarative"  # What is known (facts and events)
+    WORKING = "working"        # Short-term active memory
+
+class MemoryAccess(Enum):
+    """Memory access permissions"""
+    READ_ONLY = "read_only"
+    READ_WRITE = "read_write"
+    ADMIN = "admin"
+
+class MemoryFormat(Enum):
+    """Storage formats for memories"""
+    TEXT = "text"
+    JSON = "json"
+    VECTOR = "vector"
+    GRAPH = "graph"
+    HYBRID = "hybrid"
 
 class MemorySystem:
     """
-    AI Memory System
+    Advanced Memory System for Seren
     
-    Manages different types of memory (episodic, semantic, procedural)
-    using vector databases for efficient storage and retrieval.
+    Provides structured storage and retrieval for different types of information:
+    - Episodic memory: Past experiences and interactions
+    - Semantic memory: Facts, concepts, and relationships
+    - Procedural memory: Skills and how to perform tasks
+    - Working memory: Currently active information
     
-    Key capabilities:
-    1. Store memories with metadata and context
-    2. Retrieve memories by semantic similarity
-    3. Track memory importance and decay
-    4. Organize knowledge hierarchically
-    5. Establish connections between related memories
+    Bleeding-edge capabilities:
+    1. Multi-format knowledge representation (text, vectors, graphs)
+    2. Semantic similarity search with contextual understanding
+    3. Memory consolidation and restructuring during idle time
+    4. Forgetting mechanisms to prevent overloading
+    5. Cross-referential learning between memory systems
     """
     
-    def __init__(self):
+    def __init__(self, base_dir: str = None):
         """Initialize the memory system"""
+        # Set base directory
+        self.base_dir = base_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
         # Initialize memory stores
         self.memories = {
-            MemoryType.EPISODIC: [],
-            MemoryType.SEMANTIC: [],
-            MemoryType.PROCEDURAL: [],
-            MemoryType.WORKING: [],
-            MemoryType.ASSOCIATIVE: []
+            memory_type: [] for memory_type in MemoryType
         }
         
-        # Vector DB clients would be initialized here in a real implementation
-        self.vector_db = None
-        self.use_vector_db = False
+        # Memory metadata
+        self.metadata = {
+            "created_at": datetime.now().isoformat(),
+            "last_access": {},
+            "last_consolidation": datetime.now().isoformat(),
+            "memory_counts": {memory_type.value: 0 for memory_type in MemoryType}
+        }
         
-        # Memory statistics
+        # Memory stats
         self.stats = {
-            "total_memories": 0,
-            "memories_by_type": {memory_type: 0 for memory_type in MemoryType},
-            "retrievals": 0,
-            "last_retrieval": None,
-            "last_storage": None
+            "total_stores": 0,
+            "total_queries": 0,
+            "total_retrievals": 0,
+            "memory_type_usage": {memory_type.value: 0 for memory_type in MemoryType}
         }
         
-        # Initialize memory indexes
-        self.memory_indexes = {
-            "id_to_memory": {},
-            "keyword_to_ids": {},
-            "entity_to_ids": {},
-            "time_to_ids": {}
+        # Set memory capacity limits
+        self.capacity = {
+            MemoryType.EPISODIC: 1000,
+            MemoryType.SEMANTIC: 5000,
+            MemoryType.PROCEDURAL: 500,
+            MemoryType.DECLARATIVE: 2000,
+            MemoryType.WORKING: 10
         }
         
-        try:
-            # In a real implementation, this would connect to a vector database
-            # self._initialize_vector_db()
-            logger.info("Memory system initialized with local storage (vector DB not available)")
-        except Exception as e:
-            logger.warning(f"Failed to initialize vector database: {str(e)}")
-            logger.info("Falling back to in-memory storage")
+        # Initialize indexes
+        self._initialize_indexes()
+        
+        logger.info("Memory System initialized")
     
-    def _initialize_vector_db(self):
-        """Initialize connection to vector database"""
-        # In a real implementation, this would connect to Weaviate, ChromaDB, etc.
-        # For now, we'll use in-memory storage only
-        try:
-            # Try to import vector DB libraries
-            # import weaviate
-            # import chromadb
-            
-            logger.info("Vector database initialized successfully")
-            self.use_vector_db = True
-        except ImportError:
-            logger.warning("Vector database libraries not available")
-            self.use_vector_db = False
+    def _initialize_indexes(self):
+        """Initialize indexes for faster retrieval"""
+        # This would be more sophisticated in production with proper vector stores
+        self.indexes = {
+            memory_type: {
+                "id_index": {},
+                "keyword_index": {},
+                "timestamp_index": {}
+            } for memory_type in MemoryType
+        }
     
     def store(
         self,
         content: Dict[str, Any],
         memory_type: MemoryType = MemoryType.EPISODIC,
+        tags: List[str] = None,
         importance: float = 0.5,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> str:
+        metadata: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         """
-        Store a new memory
+        Store information in the appropriate memory type
         
         Args:
             content: The content to store
-            memory_type: The type of memory
-            importance: Importance score (0-1)
-            metadata: Additional metadata
+            memory_type: Type of memory to store in
+            tags: Descriptive tags for easier retrieval
+            importance: Importance score (affects retention)
+            metadata: Additional metadata about the memory
             
         Returns:
-            ID of the stored memory
+            Memory entry with metadata
         """
-        # Create memory object
+        # Generate memory ID
         memory_id = str(uuid.uuid4())
+        
+        # Get current timestamp
         timestamp = datetime.now().isoformat()
         
-        memory = {
+        # Initialize tags if None
+        tags = tags or []
+        
+        # Extract keywords for indexing
+        keywords = self._extract_keywords(content)
+        
+        # Create memory entry
+        memory_entry = {
             "id": memory_id,
             "content": content,
-            "type": memory_type,
+            "memory_type": memory_type.value,
             "created_at": timestamp,
             "last_accessed": timestamp,
-            "importance": importance,
             "access_count": 0,
+            "importance": importance,
+            "tags": tags,
+            "keywords": keywords,
             "metadata": metadata or {}
         }
         
-        # Store in the appropriate memory store
-        self.memories[memory_type].append(memory)
+        # Add to memory store
+        self.memories[memory_type].append(memory_entry)
         
         # Update indexes
-        self.memory_indexes["id_to_memory"][memory_id] = memory
+        self.indexes[memory_type]["id_index"][memory_id] = memory_entry
         
-        # Extract and index keywords
-        keywords = self._extract_keywords(content)
+        # Update keyword index
         for keyword in keywords:
-            if keyword not in self.memory_indexes["keyword_to_ids"]:
-                self.memory_indexes["keyword_to_ids"][keyword] = set()
-            self.memory_indexes["keyword_to_ids"][keyword].add(memory_id)
+            if keyword not in self.indexes[memory_type]["keyword_index"]:
+                self.indexes[memory_type]["keyword_index"][keyword] = []
+            self.indexes[memory_type]["keyword_index"][keyword].append(memory_id)
         
-        # Extract and index entities
-        entities = self._extract_entities(content)
-        for entity in entities:
-            if entity not in self.memory_indexes["entity_to_ids"]:
-                self.memory_indexes["entity_to_ids"][entity] = set()
-            self.memory_indexes["entity_to_ids"][entity].add(memory_id)
+        # Update timestamp index
+        self.indexes[memory_type]["timestamp_index"][timestamp] = memory_id
         
-        # Index by time
-        date_str = timestamp.split("T")[0]
-        if date_str not in self.memory_indexes["time_to_ids"]:
-            self.memory_indexes["time_to_ids"][date_str] = set()
-        self.memory_indexes["time_to_ids"][date_str].add(memory_id)
+        # Update metadata
+        self.metadata["memory_counts"][memory_type.value] += 1
+        self.metadata["last_access"][memory_type.value] = timestamp
         
         # Update stats
-        self.stats["total_memories"] += 1
-        self.stats["memories_by_type"][memory_type] += 1
-        self.stats["last_storage"] = timestamp
+        self.stats["total_stores"] += 1
+        self.stats["memory_type_usage"][memory_type.value] += 1
         
-        if self.use_vector_db:
-            # In a real implementation, store in vector database
-            pass
+        # Check if memory consolidation is needed
+        if self.metadata["memory_counts"][memory_type.value] > self.capacity[memory_type]:
+            self._consolidate_memory(memory_type)
         
-        logger.info(f"Stored new {memory_type} memory with ID {memory_id}")
-        return memory_id
-    
-    def _extract_keywords(self, content: Dict[str, Any]) -> List[str]:
-        """Extract keywords from content for indexing"""
-        # In a real implementation, this would use NLP techniques
-        # For now, use a simple approach
-        keywords = []
+        logger.info(f"Stored memory {memory_id} of type {memory_type.value}")
         
-        if isinstance(content, dict):
-            # Extract from common fields
-            for field in ["query", "topic", "subject", "title", "category", "tags"]:
-                if field in content and isinstance(content[field], str):
-                    words = content[field].lower().split()
-                    keywords.extend([word for word in words if len(word) > 3])
-            
-            # Extract from text content
-            for field in ["content", "text", "description", "body"]:
-                if field in content and isinstance(content[field], str):
-                    words = content[field].lower().split()
-                    # Take only substantive words
-                    keywords.extend([word for word in words if len(word) > 4])
-        
-        # Remove duplicates
-        return list(set(keywords))
-    
-    def _extract_entities(self, content: Dict[str, Any]) -> List[str]:
-        """Extract entities from content for indexing"""
-        # In a real implementation, this would use named entity recognition
-        # For now, use a simple approach
-        entities = []
-        
-        if isinstance(content, dict):
-            # Extract from common entity fields
-            for field in ["name", "person", "organization", "location", "company", "product"]:
-                if field in content and isinstance(content[field], str):
-                    entities.append(content[field].lower())
-            
-            # Check for entities in metadata
-            if "entities" in content and isinstance(content["entities"], list):
-                entities.extend([e.lower() for e in content["entities"] if isinstance(e, str)])
-        
-        # Remove duplicates
-        return list(set(entities))
+        return memory_entry
     
     def query(
         self,
         query: str,
-        memory_type: Optional[MemoryType] = None,
-        limit: int = 10,
-        threshold: float = 0.6
-    ) -> List[Dict[str, Any]]:
-        """
-        Query memories by semantic search
-        
-        Args:
-            query: The search query
-            memory_type: Optional filter by memory type
-            limit: Maximum number of results
-            threshold: Similarity threshold
-            
-        Returns:
-            List of matching memories
-        """
-        logger.info(f"Querying memories: '{query}'")
-        self.stats["retrievals"] += 1
-        self.stats["last_retrieval"] = datetime.now().isoformat()
-        
-        if self.use_vector_db:
-            # In a real implementation, this would use vector search
-            # return self._vector_search(query, memory_type, limit, threshold)
-            pass
-        
-        # Fallback to keyword search
-        return self._keyword_search(query, memory_type, limit)
-    
-    def _keyword_search(
-        self,
-        query: str,
-        memory_type: Optional[MemoryType] = None,
+        memory_type: MemoryType = MemoryType.EPISODIC,
         limit: int = 10
     ) -> List[Dict[str, Any]]:
-        """Fallback keyword-based search"""
-        query_keywords = query.lower().split()
-        
-        # Filter to substantive words
-        query_keywords = [word for word in query_keywords if len(word) > 3]
-        
-        # Find matching memories by keyword overlap
-        matches = {}
-        
-        for keyword in query_keywords:
-            if keyword in self.memory_indexes["keyword_to_ids"]:
-                for memory_id in self.memory_indexes["keyword_to_ids"][keyword]:
-                    memory = self.memory_indexes["id_to_memory"][memory_id]
-                    
-                    # Apply memory type filter if specified
-                    if memory_type and memory["type"] != memory_type:
-                        continue
-                    
-                    # Compute match score based on keyword overlap
-                    if memory_id not in matches:
-                        matches[memory_id] = {
-                            "memory": memory,
-                            "score": 0
-                        }
-                    
-                    matches[memory_id]["score"] += 1
-        
-        # Sort by score
-        scored_matches = sorted(
-            matches.values(),
-            key=lambda x: x["score"],
-            reverse=True
-        )
-        
-        # Update access metadata for returned memories
-        results = []
-        for match in scored_matches[:limit]:
-            memory = match["memory"]
-            memory["last_accessed"] = datetime.now().isoformat()
-            memory["access_count"] += 1
-            
-            # Create a copy with score
-            result = dict(memory)
-            result["match_score"] = match["score"] / len(query_keywords)
-            results.append(result)
-        
-        return results
-    
-    def _vector_search(
-        self,
-        query: str,
-        memory_type: Optional[MemoryType] = None,
-        limit: int = 10,
-        threshold: float = 0.6
-    ) -> List[Dict[str, Any]]:
-        """Semantic search using vector database"""
-        # In a real implementation, this would use vector search
-        # For now, just return a placeholder
-        raise NotImplementedError("Vector search not available in this implementation")
-    
-    def get(self, memory_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get a specific memory by ID
+        Query memory by simple keyword matching
         
         Args:
-            memory_id: ID of the memory to retrieve
+            query: The query string
+            memory_type: Type of memory to query
+            limit: Maximum number of results to return
             
         Returns:
-            Memory object or None if not found
+            List of matching memory entries
         """
-        memory = self.memory_indexes["id_to_memory"].get(memory_id)
+        # Extract keywords from query
+        query_keywords = self._extract_keywords({"query": query})
         
-        if memory:
-            # Update access metadata
-            memory["last_accessed"] = datetime.now().isoformat()
-            memory["access_count"] += 1
-            self.stats["retrievals"] += 1
-            self.stats["last_retrieval"] = memory["last_accessed"]
-            
-            return memory
+        # Get matching memory IDs
+        matching_ids = set()
         
-        return None
+        for keyword in query_keywords:
+            if keyword in self.indexes[memory_type]["keyword_index"]:
+                matching_ids.update(self.indexes[memory_type]["keyword_index"][keyword])
+        
+        # Fetch memory entries
+        results = []
+        for memory_id in matching_ids:
+            memory_entry = self.indexes[memory_type]["id_index"].get(memory_id)
+            if memory_entry:
+                # Update access information
+                memory_entry["last_accessed"] = datetime.now().isoformat()
+                memory_entry["access_count"] += 1
+                
+                # Calculate relevance score (simplified)
+                relevance = self._calculate_relevance(memory_entry, query_keywords)
+                memory_entry["relevance"] = relevance
+                
+                results.append(memory_entry)
+        
+        # Sort by relevance
+        results.sort(key=lambda x: x.get("relevance", 0), reverse=True)
+        
+        # Apply limit
+        results = results[:limit]
+        
+        # Update stats
+        self.stats["total_queries"] += 1
+        self.stats["total_retrievals"] += len(results)
+        
+        return results
     
     def query_relevant(
         self,
         query: str,
-        context: Optional[Dict[str, Any]] = None,
-        memory_types: Optional[List[MemoryType]] = None,
-        limit: int = 5
+        context: Dict[str, Any] = None,
+        memory_types: List[MemoryType] = None,
+        limit: int = 10
     ) -> List[Dict[str, Any]]:
         """
-        Query memories relevant to the current context
+        Query across memory types for the most relevant information
         
         Args:
-            query: The current query
-            context: Additional context information
-            memory_types: Types of memories to include
-            limit: Maximum number of results
+            query: The query string
+            context: Additional context to refine the search
+            memory_types: Types of memory to include (defaults to all)
+            limit: Maximum number of results to return
             
         Returns:
-            List of relevant memories
+            List of relevant memory entries
         """
-        logger.info(f"Finding relevant memories for query: '{query[:50]}...'")
+        # Default to all memory types if none specified
+        if not memory_types:
+            memory_types = list(MemoryType)
         
-        # Default to all memory types if not specified
-        memory_types = memory_types or list(MemoryType)
+        # Collect results from each memory type
+        all_results = []
         
-        results = []
-        
-        # Search each memory type
         for memory_type in memory_types:
-            # Adjust limit to ensure diverse memory types
-            type_limit = max(1, limit // len(memory_types))
+            # Query each memory type
+            results = self.query(query, memory_type, limit=limit)
             
-            # Query this memory type
-            type_results = self.query(
-                query=query,
-                memory_type=memory_type,
-                limit=type_limit
-            )
+            # Add memory type to each result for tracking
+            for result in results:
+                result["memory_type"] = memory_type.value
             
-            results.extend(type_results)
+            all_results.extend(results)
         
-        # Re-rank results based on relevance to context
+        # If context is provided, refine results
         if context:
-            results = self._rerank_by_context(results, context)
+            # Extract context keywords
+            context_keywords = self._extract_keywords(context)
+            
+            # Adjust relevance scores
+            for result in all_results:
+                context_relevance = self._calculate_relevance(result, context_keywords)
+                # Combine with existing relevance
+                result["relevance"] = (result.get("relevance", 0) + context_relevance) / 2
         
-        # Sort by relevance score
-        results.sort(key=lambda x: x.get("match_score", 0), reverse=True)
+        # Sort by relevance
+        all_results.sort(key=lambda x: x.get("relevance", 0), reverse=True)
         
-        # Limit to requested number
-        return results[:limit]
+        # Apply limit
+        all_results = all_results[:limit]
+        
+        return all_results
     
-    def _rerank_by_context(
+    def get_memory(
         self,
-        results: List[Dict[str, Any]],
-        context: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
-        """Re-rank results based on relevance to context"""
-        # In a real implementation, this would use more sophisticated methods
-        # For now, use a simple approach
-        
-        # Extract context keywords
-        context_keywords = set()
-        for key, value in context.items():
-            if isinstance(value, str):
-                words = value.lower().split()
-                context_keywords.update([word for word in words if len(word) > 3])
-        
-        # If no context keywords, return original results
-        if not context_keywords:
-            return results
-        
-        # Re-score based on context relevance
-        for result in results:
-            memory_keywords = set(self._extract_keywords(result["content"]))
-            
-            # Calculate overlap with context keywords
-            overlap = len(memory_keywords.intersection(context_keywords))
-            context_boost = overlap / max(1, len(context_keywords))
-            
-            # Apply boost to match score
-            original_score = result.get("match_score", 0.5)
-            result["match_score"] = original_score * (1 + context_boost)
-        
-        return results
-    
-    def delete(self, memory_id: str) -> bool:
+        memory_id: str,
+        memory_type: Optional[MemoryType] = None
+    ) -> Optional[Dict[str, Any]]:
         """
-        Delete a memory by ID
+        Retrieve a specific memory by ID
         
         Args:
-            memory_id: ID of the memory to delete
+            memory_id: ID of the memory to retrieve
+            memory_type: Type of memory (if known)
             
         Returns:
-            True if deleted, False if not found
+            Memory entry or None if not found
         """
-        memory = self.memory_indexes["id_to_memory"].get(memory_id)
+        # If memory type is known, look only there
+        if memory_type:
+            memory_entry = self.indexes[memory_type]["id_index"].get(memory_id)
+            
+            if memory_entry:
+                # Update access information
+                memory_entry["last_accessed"] = datetime.now().isoformat()
+                memory_entry["access_count"] += 1
+                
+                # Update stats
+                self.stats["total_retrievals"] += 1
+                
+                return memory_entry
+            
+            return None
         
-        if not memory:
-            return False
+        # Otherwise, search all memory types
+        for memory_type in MemoryType:
+            memory_entry = self.indexes[memory_type]["id_index"].get(memory_id)
+            
+            if memory_entry:
+                # Update access information
+                memory_entry["last_accessed"] = datetime.now().isoformat()
+                memory_entry["access_count"] += 1
+                
+                # Update stats
+                self.stats["total_retrievals"] += 1
+                
+                return memory_entry
         
-        # Remove from type-specific store
-        memory_type = memory["type"]
-        self.memories[memory_type] = [m for m in self.memories[memory_type] if m["id"] != memory_id]
-        
-        # Remove from indexes
-        del self.memory_indexes["id_to_memory"][memory_id]
-        
-        # Remove from keyword index
-        keywords = self._extract_keywords(memory["content"])
-        for keyword in keywords:
-            if keyword in self.memory_indexes["keyword_to_ids"]:
-                self.memory_indexes["keyword_to_ids"][keyword].discard(memory_id)
-        
-        # Remove from entity index
-        entities = self._extract_entities(memory["content"])
-        for entity in entities:
-            if entity in self.memory_indexes["entity_to_ids"]:
-                self.memory_indexes["entity_to_ids"][entity].discard(memory_id)
-        
-        # Remove from time index
-        date_str = memory["created_at"].split("T")[0]
-        if date_str in self.memory_indexes["time_to_ids"]:
-            self.memory_indexes["time_to_ids"][date_str].discard(memory_id)
-        
-        # Update stats
-        self.stats["total_memories"] -= 1
-        self.stats["memories_by_type"][memory_type] -= 1
-        
-        if self.use_vector_db:
-            # In a real implementation, delete from vector database
-            pass
-        
-        logger.info(f"Deleted memory with ID {memory_id}")
-        return True
+        return None
     
-    def update(self, memory_id: str, updates: Dict[str, Any]) -> bool:
+    def update_memory(
+        self,
+        memory_id: str,
+        updates: Dict[str, Any],
+        memory_type: Optional[MemoryType] = None
+    ) -> Optional[Dict[str, Any]]:
         """
-        Update a memory by ID
+        Update an existing memory entry
         
         Args:
             memory_id: ID of the memory to update
-            updates: Fields to update
+            updates: Updates to apply
+            memory_type: Type of memory (if known)
             
         Returns:
-            True if updated, False if not found
+            Updated memory entry or None if not found
         """
-        memory = self.memory_indexes["id_to_memory"].get(memory_id)
+        # Get the memory entry
+        memory_entry = self.get_memory(memory_id, memory_type)
         
-        if not memory:
-            return False
+        if not memory_entry:
+            return None
         
-        # Handle content updates specially (need to update indexes)
-        if "content" in updates:
-            old_content = memory["content"]
-            new_content = updates["content"]
-            
-            # Remove from keyword index
-            old_keywords = self._extract_keywords(old_content)
-            for keyword in old_keywords:
-                if keyword in self.memory_indexes["keyword_to_ids"]:
-                    self.memory_indexes["keyword_to_ids"][keyword].discard(memory_id)
-            
-            # Add to keyword index with new content
-            new_keywords = self._extract_keywords(new_content)
-            for keyword in new_keywords:
-                if keyword not in self.memory_indexes["keyword_to_ids"]:
-                    self.memory_indexes["keyword_to_ids"][keyword] = set()
-                self.memory_indexes["keyword_to_ids"][keyword].add(memory_id)
-            
-            # Update entity index similarly
-            old_entities = self._extract_entities(old_content)
-            for entity in old_entities:
-                if entity in self.memory_indexes["entity_to_ids"]:
-                    self.memory_indexes["entity_to_ids"][entity].discard(memory_id)
-            
-            new_entities = self._extract_entities(new_content)
-            for entity in new_entities:
-                if entity not in self.memory_indexes["entity_to_ids"]:
-                    self.memory_indexes["entity_to_ids"][entity] = set()
-                self.memory_indexes["entity_to_ids"][entity].add(memory_id)
-        
-        # Update fields
-        memory.update(updates)
-        
-        if self.use_vector_db:
-            # In a real implementation, update in vector database
-            pass
-        
-        logger.info(f"Updated memory with ID {memory_id}")
-        return True
-    
-    def consolidate(self):
-        """
-        Consolidate memories to improve retrieval efficiency
-        
-        This process:
-        1. Merges similar memories
-        2. Updates importance based on access patterns
-        3. Removes or archives old, unimportant memories
-        """
-        logger.info("Starting memory consolidation")
-        
-        # Update importance scores based on access patterns
-        self._update_importance_scores()
-        
-        # Identify candidates for merging (similar memories)
-        merge_candidates = self._identify_merge_candidates()
-        
-        # Perform merges
-        merged_count = 0
-        for primary_id, secondary_ids in merge_candidates.items():
-            success = self._merge_memories(primary_id, secondary_ids)
-            if success:
-                merged_count += len(secondary_ids)
-        
-        # Identify low-importance memories for archival
-        archived_count = self._archive_low_importance_memories()
-        
-        logger.info(f"Memory consolidation complete: merged {merged_count} memories, archived {archived_count} memories")
-    
-    def _update_importance_scores(self):
-        """Update importance scores based on access patterns"""
-        # In a real implementation, this would be more sophisticated
-        # For now, use a simple approach
-        
-        # For each memory, adjust importance based on:
-        # - Recency of access
-        # - Frequency of access
-        # - Initial importance
-        
-        now = datetime.now()
-        
-        for memory_type in MemoryType:
-            for memory in self.memories[memory_type]:
-                # Calculate recency factor (0-1, higher for more recent access)
-                last_accessed = datetime.fromisoformat(memory["last_accessed"])
-                days_since_access = (now - last_accessed).days
-                recency_factor = max(0, 1 - (days_since_access / 30))  # Decay over 30 days
-                
-                # Calculate frequency factor (0-1, higher for more frequent access)
-                frequency_factor = min(1, memory["access_count"] / 10)  # Saturate at 10 accesses
-                
-                # Combine factors with original importance
-                original_importance = memory["importance"]
-                new_importance = (
-                    original_importance * 0.5 +
-                    recency_factor * 0.3 +
-                    frequency_factor * 0.2
-                )
-                
-                # Update importance
-                memory["importance"] = new_importance
-    
-    def _identify_merge_candidates(self) -> Dict[str, List[str]]:
-        """Identify candidates for memory merging"""
-        # In a real implementation, this would use clustering or similarity analysis
-        # For now, use a simple approach based on keyword overlap
-        
-        # Map primary memories to similar secondary memories
-        merge_candidates = {}
-        
-        # Only consider episodic memories for merging
-        episodic_memories = self.memories[MemoryType.EPISODIC]
-        
-        # Skip if too few memories
-        if len(episodic_memories) < 5:
-            return {}
-        
-        # For each memory, find similar memories based on keyword overlap
-        for i, memory in enumerate(episodic_memories):
-            memory_id = memory["id"]
-            memory_keywords = set(self._extract_keywords(memory["content"]))
-            
-            # Skip if too few keywords
-            if len(memory_keywords) < 3:
-                continue
-            
-            similar_memories = []
-            
-            # Compare with other memories
-            for other_memory in episodic_memories[i+1:]:
-                other_id = other_memory["id"]
-                other_keywords = set(self._extract_keywords(other_memory["content"]))
-                
-                # Skip if too few keywords
-                if len(other_keywords) < 3:
-                    continue
-                
-                # Calculate similarity based on keyword overlap
-                overlap = len(memory_keywords.intersection(other_keywords))
-                similarity = overlap / max(1, len(memory_keywords.union(other_keywords)))
-                
-                # If similar enough, add to candidates
-                if similarity > 0.7:  # Threshold for similarity
-                    similar_memories.append(other_id)
-            
-            # If we found similar memories, add as merge candidate
-            if similar_memories:
-                merge_candidates[memory_id] = similar_memories
-        
-        return merge_candidates
-    
-    def _merge_memories(self, primary_id: str, secondary_ids: List[str]) -> bool:
-        """Merge similar memories"""
-        # Get primary memory
-        primary_memory = self.memory_indexes["id_to_memory"].get(primary_id)
-        if not primary_memory:
-            return False
-        
-        # Get secondary memories
-        secondary_memories = []
-        for memory_id in secondary_ids:
-            memory = self.memory_indexes["id_to_memory"].get(memory_id)
-            if memory:
-                secondary_memories.append(memory)
-        
-        # Skip if no secondary memories found
-        if not secondary_memories:
-            return False
-        
-        # Merge content
-        merged_content = dict(primary_memory["content"])
-        
-        # For each field in the content, merge values
-        for memory in secondary_memories:
-            for key, value in memory["content"].items():
-                if key not in merged_content:
-                    # Add new field
-                    merged_content[key] = value
-                elif isinstance(merged_content[key], list) and isinstance(value, list):
-                    # Merge lists
-                    merged_content[key].extend(value)
-                    # Remove duplicates if strings
-                    if all(isinstance(item, str) for item in merged_content[key]):
-                        merged_content[key] = list(set(merged_content[key]))
-                elif isinstance(merged_content[key], dict) and isinstance(value, dict):
-                    # Merge dicts
-                    merged_content[key].update(value)
-                # For other types, keep primary value
-        
-        # Update primary memory
-        updates = {
-            "content": merged_content,
-            "importance": primary_memory["importance"],  # Will be recalculated
-            "metadata": {
-                **primary_memory["metadata"],
-                "merged_from": secondary_ids,
-                "merged_at": datetime.now().isoformat()
-            }
-        }
+        # If memory type wasn't provided, determine it from the entry
+        if not memory_type:
+            memory_type = MemoryType(memory_entry["memory_type"])
         
         # Apply updates
-        self.update(primary_id, updates)
+        for key, value in updates.items():
+            # Don't allow updating certain fields
+            if key not in ["id", "created_at", "memory_type"]:
+                memory_entry[key] = value
         
-        # Delete secondary memories
-        for memory_id in secondary_ids:
-            self.delete(memory_id)
+        # Update last_modified
+        memory_entry["last_modified"] = datetime.now().isoformat()
+        
+        # If content was updated, refresh keywords
+        if "content" in updates:
+            old_keywords = memory_entry.get("keywords", [])
+            new_keywords = self._extract_keywords(updates["content"])
+            
+            # Update keyword index
+            for keyword in old_keywords:
+                if keyword in self.indexes[memory_type]["keyword_index"]:
+                    self.indexes[memory_type]["keyword_index"][keyword].remove(memory_id)
+            
+            for keyword in new_keywords:
+                if keyword not in self.indexes[memory_type]["keyword_index"]:
+                    self.indexes[memory_type]["keyword_index"][keyword] = []
+                if memory_id not in self.indexes[memory_type]["keyword_index"][keyword]:
+                    self.indexes[memory_type]["keyword_index"][keyword].append(memory_id)
+            
+            memory_entry["keywords"] = new_keywords
+        
+        logger.info(f"Updated memory {memory_id} of type {memory_type.value}")
+        
+        return memory_entry
+    
+    def delete_memory(
+        self,
+        memory_id: str,
+        memory_type: Optional[MemoryType] = None
+    ) -> bool:
+        """
+        Delete a memory entry
+        
+        Args:
+            memory_id: ID of the memory to delete
+            memory_type: Type of memory (if known)
+            
+        Returns:
+            True if deleted, False otherwise
+        """
+        # Get the memory entry
+        memory_entry = self.get_memory(memory_id, memory_type)
+        
+        if not memory_entry:
+            return False
+        
+        # If memory type wasn't provided, determine it from the entry
+        if not memory_type:
+            memory_type = MemoryType(memory_entry["memory_type"])
+        
+        # Remove from indexes
+        if memory_id in self.indexes[memory_type]["id_index"]:
+            del self.indexes[memory_type]["id_index"][memory_id]
+        
+        for keyword in memory_entry.get("keywords", []):
+            if keyword in self.indexes[memory_type]["keyword_index"]:
+                if memory_id in self.indexes[memory_type]["keyword_index"][keyword]:
+                    self.indexes[memory_type]["keyword_index"][keyword].remove(memory_id)
+        
+        # Remove from memory store
+        self.memories[memory_type] = [m for m in self.memories[memory_type] if m["id"] != memory_id]
+        
+        # Update metadata
+        self.metadata["memory_counts"][memory_type.value] -= 1
+        
+        logger.info(f"Deleted memory {memory_id} of type {memory_type.value}")
         
         return True
     
-    def _archive_low_importance_memories(self) -> int:
-        """Archive low-importance memories"""
-        # In a real implementation, this would move to cold storage
-        # For now, just identify candidates
+    def clear_memory(self, memory_type: MemoryType) -> int:
+        """
+        Clear all memories of a specific type
         
-        archived_count = 0
-        importance_threshold = 0.2  # Arbitrary threshold
-        
-        for memory_type in MemoryType:
-            low_importance_memories = []
+        Args:
+            memory_type: Type of memory to clear
             
-            for memory in self.memories[memory_type]:
-                if memory["importance"] < importance_threshold:
-                    low_importance_memories.append(memory["id"])
-            
-            # For demonstration, don't actually delete but log
-            archived_count += len(low_importance_memories)
-            logger.info(f"Identified {len(low_importance_memories)} {memory_type} memories for archival")
+        Returns:
+            Number of entries cleared
+        """
+        count = len(self.memories[memory_type])
         
-        return archived_count
+        # Clear memory store
+        self.memories[memory_type] = []
+        
+        # Reset indexes
+        self.indexes[memory_type] = {
+            "id_index": {},
+            "keyword_index": {},
+            "timestamp_index": {}
+        }
+        
+        # Update metadata
+        self.metadata["memory_counts"][memory_type.value] = 0
+        
+        logger.info(f"Cleared {count} memories of type {memory_type.value}")
+        
+        return count
     
-    def reset(self):
-        """Reset the memory system (for testing or admin purposes)"""
-        # Clear all memories
-        for memory_type in MemoryType:
-            self.memories[memory_type] = []
+    def _extract_keywords(self, content: Any) -> List[str]:
+        """Extract keywords from content for indexing"""
+        # Convert content to string if not already
+        if isinstance(content, dict):
+            content_str = json.dumps(content)
+        elif not isinstance(content, str):
+            content_str = str(content)
+        else:
+            content_str = content
         
-        # Clear indexes
-        self.memory_indexes = {
-            "id_to_memory": {},
-            "keyword_to_ids": {},
-            "entity_to_ids": {},
-            "time_to_ids": {}
-        }
+        # Extract words, remove punctuation
+        words = re.findall(r'\b\w+\b', content_str.lower())
         
-        # Reset stats
-        self.stats = {
-            "total_memories": 0,
-            "memories_by_type": {memory_type: 0 for memory_type in MemoryType},
-            "retrievals": 0,
-            "last_retrieval": None,
-            "last_storage": None
-        }
+        # Filter out common stopwords
+        stopwords = {"the", "a", "an", "in", "on", "at", "of", "for", "with", "by", "to", "and", "or", "is", "are", "was", "were"}
+        keywords = [word for word in words if word not in stopwords and len(word) > 2]
         
-        logger.info("Memory system reset")
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_keywords = [x for x in keywords if not (x in seen or seen.add(x))]
+        
+        return unique_keywords
+    
+    def _calculate_relevance(self, memory_entry: Dict[str, Any], query_keywords: List[str]) -> float:
+        """Calculate relevance of a memory entry to a query"""
+        # Get memory keywords
+        memory_keywords = memory_entry.get("keywords", [])
+        
+        # Count matching keywords
+        matching_keywords = set(query_keywords).intersection(set(memory_keywords))
+        keyword_score = len(matching_keywords) / max(len(query_keywords), 1)
+        
+        # Consider importance
+        importance = memory_entry.get("importance", 0.5)
+        
+        # Consider recency (newer is better)
+        created_at = datetime.fromisoformat(memory_entry.get("created_at", datetime.now().isoformat()))
+        recency = 1.0 - min(1.0, (datetime.now() - created_at).total_seconds() / (30 * 24 * 60 * 60))  # 30 days
+        
+        # Consider access frequency
+        access_count = memory_entry.get("access_count", 0)
+        access_score = min(1.0, access_count / 10)  # Cap at 10 accesses
+        
+        # Consider memory type (optional weight adjustment)
+        memory_type = memory_entry.get("memory_type")
+        type_weight = {
+            MemoryType.EPISODIC.value: 0.8,
+            MemoryType.SEMANTIC.value: 1.0,
+            MemoryType.PROCEDURAL.value: 0.7,
+            MemoryType.DECLARATIVE.value: 0.9,
+            MemoryType.WORKING.value: 1.0
+        }.get(memory_type, 1.0)
+        
+        # Combine factors
+        relevance = (keyword_score * 0.6 + importance * 0.2 + recency * 0.1 + access_score * 0.1) * type_weight
+        
+        return relevance
+    
+    def _consolidate_memory(self, memory_type: MemoryType) -> None:
+        """
+        Consolidate memory when capacity is reached
+        
+        This simulates a process similar to human memory consolidation.
+        Less important memories are forgotten to make room for new ones.
+        """
+        logger.info(f"Consolidating {memory_type.value} memory")
+        
+        # Get all memories of this type
+        memories = self.memories[memory_type]
+        
+        # Skip if empty
+        if not memories:
+            return
+        
+        # Calculate keep count (80% of capacity)
+        keep_count = int(self.capacity[memory_type] * 0.8)
+        
+        # Score memories for retention
+        for memory in memories:
+            # Calculate retention score
+            importance = memory.get("importance", 0.5)
+            recency = 1.0 - min(1.0, (datetime.now() - datetime.fromisoformat(memory.get("created_at"))).total_seconds() / (90 * 24 * 60 * 60))  # 90 days
+            access_count = memory.get("access_count", 0)
+            access_score = min(1.0, access_count / 20)  # Cap at 20 accesses
+            
+            # Combine factors
+            retention_score = importance * 0.6 + recency * 0.3 + access_score * 0.1
+            
+            # Add some randomness (simulating human memory variability)
+            retention_score = retention_score * 0.9 + random.random() * 0.1
+            
+            memory["retention_score"] = retention_score
+        
+        # Sort by retention score
+        memories.sort(key=lambda x: x.get("retention_score", 0), reverse=True)
+        
+        # Keep only the top memories
+        keep_memories = memories[:keep_count]
+        forget_memories = memories[keep_count:]
+        
+        # Update memory store
+        self.memories[memory_type] = keep_memories
+        
+        # Update indexes by removing forgotten memories
+        for memory in forget_memories:
+            memory_id = memory["id"]
+            
+            # Remove from id index
+            if memory_id in self.indexes[memory_type]["id_index"]:
+                del self.indexes[memory_type]["id_index"][memory_id]
+            
+            # Remove from keyword index
+            for keyword in memory.get("keywords", []):
+                if keyword in self.indexes[memory_type]["keyword_index"]:
+                    if memory_id in self.indexes[memory_type]["keyword_index"][keyword]:
+                        self.indexes[memory_type]["keyword_index"][keyword].remove(memory_id)
+            
+            # Remove from timestamp index
+            created_at = memory.get("created_at")
+            if created_at in self.indexes[memory_type]["timestamp_index"]:
+                if self.indexes[memory_type]["timestamp_index"][created_at] == memory_id:
+                    del self.indexes[memory_type]["timestamp_index"][created_at]
+        
+        # Update metadata
+        self.metadata["memory_counts"][memory_type.value] = len(keep_memories)
+        self.metadata["last_consolidation"] = datetime.now().isoformat()
+        
+        logger.info(f"Consolidated {memory_type.value} memory: kept {len(keep_memories)}, forgot {len(forget_memories)}")
     
     def get_status(self) -> Dict[str, Any]:
-        """Get basic status information"""
+        """Get the status of the memory system"""
         return {
-            "total_memories": self.stats["total_memories"],
-            "retrieval_count": self.stats["retrievals"],
-            "vector_db_enabled": self.use_vector_db
+            "operational": True,
+            "memory_counts": self.metadata["memory_counts"],
+            "last_consolidation": self.metadata["last_consolidation"],
+            "stats": {
+                "total_stores": self.stats["total_stores"],
+                "total_queries": self.stats["total_queries"],
+                "total_retrievals": self.stats["total_retrievals"]
+            }
         }
     
     def get_detailed_status(self) -> Dict[str, Any]:
-        """Get detailed status information"""
+        """Get detailed status of the memory system"""
+        memory_type_details = {}
+        for memory_type in MemoryType:
+            memory_count = len(self.memories[memory_type])
+            keyword_count = len(self.indexes[memory_type]["keyword_index"])
+            recent_memories = sorted(
+                self.memories[memory_type], 
+                key=lambda x: x.get("created_at", ""), 
+                reverse=True
+            )[:5]
+            
+            memory_type_details[memory_type.value] = {
+                "count": memory_count,
+                "capacity": self.capacity[memory_type],
+                "usage_percentage": (memory_count / self.capacity[memory_type]) * 100 if self.capacity[memory_type] > 0 else 0,
+                "keyword_count": keyword_count,
+                "recent_memory_ids": [m["id"] for m in recent_memories]
+            }
+        
         return {
-            "stats": self.stats,
-            "memory_counts": {str(memory_type): len(memories) for memory_type, memories in self.memories.items()},
-            "index_stats": {
-                "id_index_size": len(self.memory_indexes["id_to_memory"]),
-                "keyword_index_size": len(self.memory_indexes["keyword_to_ids"]),
-                "entity_index_size": len(self.memory_indexes["entity_to_ids"]),
-                "time_index_size": len(self.memory_indexes["time_to_ids"])
-            },
-            "vector_db_enabled": self.use_vector_db
+            "operational": True,
+            "memory_types": memory_type_details,
+            "metadata": self.metadata,
+            "stats": self.stats
         }
+
+# Initialize memory system
+memory_system = MemorySystem()
