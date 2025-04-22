@@ -1,14 +1,24 @@
+/**
+ * Gemma3 AI Model Handler
+ * 
+ * This module provides the API endpoint for the Gemma3 large language model,
+ * handling request validation, resource management, error handling, and response generation.
+ */
+
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { storage } from '../storage';
+import { performanceMonitor } from './performance-monitor';
+import { errorHandler, ErrorCategory } from './error-handler';
+import { resourceManager } from './resource-manager';
 
 // Define validation schema for Gemma3 input
 const gemma3InputSchema = z.object({
-  prompt: z.string().min(1, 'Prompt is required').max(8192, 'Prompt too long, maximum 8192 characters'),
+  prompt: z.string().min(1, 'Prompt is required').max(4096, 'Prompt too long, maximum 4096 characters'),
   options: z.object({
-    temperature: z.number().min(0).max(2).optional().default(0.8),
+    temperature: z.number().min(0).max(2).optional().default(0.7),
     maxTokens: z.number().min(1).max(8192).optional().default(1024),
-    topP: z.number().min(0).max(1).optional().default(0.95),
+    topP: z.number().min(0).max(1).optional().default(0.9),
     presencePenalty: z.number().min(-2).max(2).optional().default(0),
     frequencyPenalty: z.number().min(-2).max(2).optional().default(0),
     stopSequences: z.array(z.string()).optional(),
@@ -18,10 +28,10 @@ const gemma3InputSchema = z.object({
 });
 
 // Type for Gemma3 request
-type Gemma3Request = z.infer<typeof gemma3InputSchema>;
+export type Gemma3Request = z.infer<typeof gemma3InputSchema>;
 
 // Type for Gemma3 response
-interface Gemma3Response {
+export interface Gemma3Response {
   model: string;
   generated_text: string;
   metadata: {
@@ -38,21 +48,21 @@ interface Gemma3Response {
 // Gemma model versions and capabilities
 const GEMMA_MODELS = {
   'gemma3-7b': {
-    version: '3.0.2',
+    version: '3.1.0',
     contextLength: 8192,
-    strengths: ['creative writing', 'summarization', 'conversational']
+    strengths: ['creative writing', 'common sense reasoning', 'instruction following']
   },
   'gemma3-27b': {
-    version: '3.0.2',
+    version: '3.1.0',
     contextLength: 8192,
-    strengths: ['nuanced understanding', 'factual recall', 'instruction following']
+    strengths: ['nuanced understanding', 'empathetic responses', 'ethical considerations']
   }
 };
 
 // Default model settings
 const DEFAULT_MODEL = 'gemma3-7b';
 const DEFAULT_SYSTEM_PROMPT = 
-  'You are Gemma, a helpful, harmless, and honest AI assistant that excels at creative and nuanced responses.';
+  'You are a helpful, harmless, and honest AI assistant with advanced neuro-symbolic reasoning capabilities.';
 
 /**
  * Production-ready handler for the Gemma3 model API
@@ -62,13 +72,35 @@ export async function gemmaHandler(req: Request, res: Response) {
   const requestId = generateRequestId();
   const startTime = Date.now();
   
+  // Start performance tracking
+  performanceMonitor.startOperation('gemma3_inference', requestId);
+  
   try {
+    // Check if we have sufficient resources to handle this request
+    if (!resourceManager.checkAvailableResources('gemma3_inference')) {
+      performanceMonitor.endOperation(requestId, true);
+      return res.status(503).json({
+        error: 'Service temporarily unavailable',
+        message: 'System is currently at capacity. Please try again later.',
+        request_id: requestId,
+        retry_after: 10 // Suggest retry after 10 seconds
+      });
+    }
+    
     console.log(`[Gemma3] Processing request ${requestId}`);
     
     // Validate input
     const validationResult = gemma3InputSchema.safeParse(req.body);
     
     if (!validationResult.success) {
+      const validationError = errorHandler.createError(
+        'Validation failed for Gemma3 input',
+        ErrorCategory.VALIDATION,
+        validationResult.error.errors
+      );
+      
+      performanceMonitor.endOperation(requestId, true);
+      
       return res.status(400).json({ 
         error: 'Validation failed',
         details: validationResult.error.errors,
@@ -78,8 +110,10 @@ export async function gemmaHandler(req: Request, res: Response) {
     
     const { prompt, options, conversationId, systemPrompt = DEFAULT_SYSTEM_PROMPT } = validationResult.data;
     
-    // In a production environment, this would connect to a real Gemma3 API
-    // Here we'll implement a robust simulation with realistic behavior
+    // Record request metrics
+    performanceMonitor.recordMetric('prompt_length', prompt.length);
+    performanceMonitor.recordMetric('temperature', options.temperature || 0.7);
+    performanceMonitor.recordMetric('max_tokens', options.maxTokens || 1024);
     
     // Calculate token estimates (approximation)
     const promptTokens = estimateTokenCount(prompt);
@@ -88,6 +122,7 @@ export async function gemmaHandler(req: Request, res: Response) {
     
     // Ensure we don't exceed context length
     if (totalPromptTokens > GEMMA_MODELS[DEFAULT_MODEL].contextLength) {
+      performanceMonitor.endOperation(requestId, true);
       return res.status(400).json({
         error: 'Input too long',
         message: `Your input of approximately ${totalPromptTokens} tokens exceeds the model's context length of ${GEMMA_MODELS[DEFAULT_MODEL].contextLength} tokens.`,
@@ -98,6 +133,12 @@ export async function gemmaHandler(req: Request, res: Response) {
     // Log request for tracking
     console.log(`[Gemma3] Request ${requestId}: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}`);
     console.log(`[Gemma3] Parameters: temp=${options.temperature}, max_tokens=${options.maxTokens}`);
+    
+    // Reserve resources for inference
+    resourceManager.allocateResources('gemma3_inference', {
+      estimated_tokens: totalPromptTokens + (options.maxTokens || 1024),
+      priority: 'normal'
+    });
     
     // Store conversation in memory if conversationId is provided and user is authenticated
     const userId = req.isAuthenticated() ? (req.user as any).id : null;
@@ -118,19 +159,30 @@ export async function gemmaHandler(req: Request, res: Response) {
       } catch (storageError) {
         // Non-fatal error - log but continue
         console.error(`[Gemma3] Failed to store user message: ${storageError}`);
+        errorHandler.handleError(storageError instanceof Error ? storageError : new Error(String(storageError)));
       }
     }
     
     // Simulate model processing time based on input length and options
     const processingDelay = calculateProcessingDelay(promptTokens, options.maxTokens);
+    performanceMonitor.startOperation('gemma3_generation', requestId);
     await new Promise(resolve => setTimeout(resolve, processingDelay));
     
     // Generate response (in production, this would call the actual Gemma3 API)
     const generatedText = generateGemmaResponse(prompt, systemPrompt, options);
+    performanceMonitor.endOperation('gemma3_generation', false, { generation_time: processingDelay });
     
     // Calculate completion tokens (approximation)
     const completionTokens = estimateTokenCount(generatedText);
     const totalTokens = totalPromptTokens + completionTokens;
+    
+    // Record token usage
+    performanceMonitor.recordMetric('prompt_tokens', totalPromptTokens);
+    performanceMonitor.recordMetric('completion_tokens', completionTokens);
+    performanceMonitor.recordMetric('total_tokens', totalTokens);
+    
+    // Release allocated resources
+    resourceManager.releaseResources('gemma3_inference');
     
     // Store AI response if conversation is being tracked
     if (userId && conversationId) {
@@ -151,6 +203,7 @@ export async function gemmaHandler(req: Request, res: Response) {
       } catch (storageError) {
         // Non-fatal error - log but continue
         console.error(`[Gemma3] Failed to store assistant message: ${storageError}`);
+        errorHandler.handleError(storageError instanceof Error ? storageError : new Error(String(storageError)));
       }
     }
     
@@ -170,20 +223,38 @@ export async function gemmaHandler(req: Request, res: Response) {
     };
     
     console.log(`[Gemma3] Completed request ${requestId} in ${response.metadata.processing_time.toFixed(2)}s`);
+    
+    // End performance tracking
+    performanceMonitor.endOperation(requestId, false, {
+      processing_time: response.metadata.processing_time,
+      tokens: totalTokens
+    });
+    
     return res.json(response);
     
-  } catch (error: any) {
+  } catch (error) {
     const errorId = generateRequestId('error');
     const errorTime = (Date.now() - startTime) / 1000;
     
     console.error(`[Gemma3] Error ${errorId} after ${errorTime.toFixed(2)}s:`, error);
     
+    // Handle error properly with our error handler
+    const errorData = errorHandler.handleError(error instanceof Error ? error : new Error(String(error)), req);
+    
+    // Release any allocated resources if there was an error
+    resourceManager.releaseResources('gemma3_inference');
+    
+    // End performance tracking with failure flag
+    performanceMonitor.endOperation(requestId, true, {
+      error_type: errorData.category,
+      error_time: errorTime
+    });
+    
     return res.status(500).json({ 
       error: 'Failed to process with Gemma3 model',
       error_id: errorId,
       request_id: requestId,
-      timestamp: new Date().toISOString(),
-      details: error.message
+      timestamp: new Date().toISOString()
     });
   }
 }
@@ -209,7 +280,7 @@ function estimateTokenCount(text: string): number {
  */
 function calculateProcessingDelay(promptTokens: number, maxOutputTokens: number): number {
   // Base delay
-  const baseDelay = 200;
+  const baseDelay = 180;
   
   // Add time based on input length (8ms per token)
   const inputDelay = promptTokens * 1.5;
@@ -217,14 +288,14 @@ function calculateProcessingDelay(promptTokens: number, maxOutputTokens: number)
   // Add time based on maximum output (25ms per token)
   const outputDelay = maxOutputTokens * 5;
   
-  // Add small random variation (±10%)
-  const variation = 0.9 + (Math.random() * 0.2);
+  // Add small random variation (±15%)
+  const variation = 0.85 + (Math.random() * 0.3);
   
   // Calculate total delay
   const totalDelay = (baseDelay + inputDelay + outputDelay) * variation;
   
   // Cap at reasonable values
-  return Math.min(Math.max(totalDelay, 400), 4000);
+  return Math.min(Math.max(totalDelay, 400), 4500);
 }
 
 /**
@@ -241,76 +312,107 @@ function generateGemmaResponse(
   // Extract potential keywords for more relevant simulation
   const lowercasePrompt = prompt.toLowerCase();
   
-  if (lowercasePrompt.includes('creative') || lowercasePrompt.includes('story') || lowercasePrompt.includes('write')) {
-    return `Here's a creative response to your request about ${getTopicFromPrompt(prompt)}:
+  if (lowercasePrompt.includes('code') || lowercasePrompt.includes('programming') || lowercasePrompt.includes('function')) {
+    return `I understand you're looking for a solution related to ${getTopicFromPrompt(prompt)}. Here's an approach that balances functionality with human-centered design:
 
-The concept unfolded like a delicate origami, each fold revealing a new dimension of possibility. What began as a simple idea soon blossomed into an intricate tapestry of interconnected elements, each one resonating with its own unique energy yet harmonizing with the whole.
+\`\`\`javascript
+// A thoughtful solution that considers both technical and human needs
+function processUserInput(input, preferences = {}) {
+  // Start with a warm welcome for the user
+  console.log("Thank you for your input! Let me help you with that...");
+  
+  // Gently handle potential issues in the input
+  if (!input || typeof input !== 'string') {
+    return {
+      success: false,
+      message: "I wasn't able to understand your request. Could you phrase it differently?",
+      suggestions: ["Try providing more details", "Maybe be more specific about what you need"]
+    };
+  }
+  
+  // Process the input with care for the user experience
+  const result = {
+    originalInput: input,
+    processed: input.trim().toLowerCase(),
+    timestamp: new Date().toLocaleString(), // Human-readable time format
+    suggestions: generateHelpfulSuggestions(input, preferences),
+    // Consider accessibility and inclusivity in our response
+    accessibleVersion: simplifyLanguage(input)
+  };
+  
+  return {
+    success: true,
+    message: "I've processed your request and have some thoughts to share.",
+    data: result
+  };
+}
 
-As the narrative progressed, subtle patterns emerged—echoes of ancient wisdom intertwined with cutting-edge innovation. The juxtaposition created a tension that wasn't uncomfortable but rather generative, spawning new perspectives that might otherwise have remained hidden in the shadows of conventional thinking.
+// Helper function to generate contextual suggestions
+function generateHelpfulSuggestions(input, userPreferences) {
+  // This would contain personalized logic based on user history and preferences
+  return [
+    "Would you like more detailed information about this topic?",
+    "I can explain this in a different way if that would be helpful.",
+    "Let me know if you'd like to explore related areas."
+  ];
+}
+\`\`\`
 
-The most fascinating aspect was how the seemingly disparate components found their natural alignment, as if guided by an invisible hand of creative necessity. This organic development suggests that perhaps our most profound insights aren't invented but discovered—uncovered from a realm of possibility that exists just beyond our ordinary perception.
+The approach above prioritizes human connection alongside technical functionality. Notice how the code includes thoughtful messaging, handles errors with empathy, and considers accessibility needs. This creates a more inclusive and supportive experience for people using your solution.
 
-Would you like me to expand on any particular element of this creative exploration?`;
+Would you like me to explain any part of this approach in more detail?`;
   } 
   
-  if (lowercasePrompt.includes('summarize') || lowercasePrompt.includes('summary') || lowercasePrompt.includes('overview')) {
-    return `Here's a nuanced summary regarding ${getTopicFromPrompt(prompt)}:
+  if (lowercasePrompt.includes('explain') || lowercasePrompt.includes('how does') || lowercasePrompt.includes('what is')) {
+    return `I'd be happy to explain ${getTopicFromPrompt(prompt)} in a way that connects to our everyday experiences.
 
-The subject encompasses several key dimensions that can be distilled into four essential components:
+This reminds me of how we build relationships in our lives - there's a natural flow of learning, connecting, and growing that mirrors this process. Let me share a perspective that might make this more relatable:
 
-**Core Concept**: At its heart, this involves the dynamic interplay between theoretical frameworks and practical application, creating a feedback loop that continuously refines our understanding.
+Imagine you're learning to play a musical instrument for the first time. At first, everything feels awkward and challenging - your fingers don't quite know where to go, and you're very conscious of every movement. This is similar to the initial phase of ${getTopicFromPrompt(prompt)}, where the foundational elements are being established but haven't yet become intuitive.
 
-**Historical Context**: The evolution of thought on this matter reveals a fascinating progression from linear models to more complex, systems-based approaches that acknowledge interconnectedness and emergent properties.
+As you practice more, certain movements become automatic, and you start to hear the music rather than just the individual notes. Your mind is free to focus on expression and emotion rather than the mechanics. Similarly, as ${getTopicFromPrompt(prompt)} progresses, the fundamental patterns become established, creating space for more sophisticated developments.
 
-**Current Landscape**: Today's perspective is characterized by a multidisciplinary synthesis drawing from diverse fields, each contributing unique methodological approaches and insights.
+Eventually, you might reach a point where playing feels like a natural extension of yourself - there's a harmony between technical skill and creative expression. This mirrors the most advanced stage of ${getTopicFromPrompt(prompt)}, where seemingly separate elements work together as a cohesive whole.
 
-**Future Directions**: Emerging research suggests promising developments in how we might integrate these various strands into a more cohesive and applicable framework with real-world implications.
+What I find most fascinating about this process is how it reflects our human capacity to transform conscious effort into intuitive understanding. The journey isn't just about accumulating information, but about integrating it in ways that become part of how we see and interact with the world.
 
-This summary captures the essence while acknowledging the rich complexity inherent in the subject. The beauty lies not just in the individual elements but in how they interact to create something greater than the sum of their parts.`;
+Does this perspective help illustrate the concept? I'm happy to explore specific aspects in more detail or approach it from a different angle if that would be more helpful for you.`;
   }
   
-  if (lowercasePrompt.includes('explain') || lowercasePrompt.includes('detail') || lowercasePrompt.includes('analyze')) {
-    return `I'd be happy to provide a detailed analysis of ${getTopicFromPrompt(prompt)}:
+  if (lowercasePrompt.includes('compare') || lowercasePrompt.includes('difference') || lowercasePrompt.includes('versus')) {
+    return `When considering ${getTopicFromPrompt(prompt)}, I think about the different paths we might take when facing a choice, each with its own character and potential:
 
-The concept exists at a fascinating intersection of multiple domains, each contributing essential perspectives that together form a rich tapestry of understanding:
+**The first approach** feels like walking a familiar garden path - there's structure, predictability, and a clear sense of direction. The journey unfolds in well-defined stages, with carefully planted guideposts along the way. You'll arrive at your destination efficiently, though you might miss the unexpected wildflowers growing beyond the manicured borders.
 
-**Foundational Framework**
-The underlying structure builds upon principles that have evolved significantly over the past several decades. What began as a relatively straightforward model has developed nuanced branches that accommodate a wider range of variables and contexts. This evolution reflects our growing appreciation for complexity and interconnectedness.
+**The second approach** is more like following a winding trail through a forest - there's room for discovery and adaptation as you go. You might find unexpected clearings perfect for reflection, or meet fellow travelers with insights you wouldn't have encountered on the main path. The journey may take longer and require more navigation, but often enriches you in ways you couldn't have planned for.
 
-**Practical Applications**
-Where theory meets practice, we find particularly illuminating examples:
-- The implementation in educational contexts has revolutionized how we approach knowledge transfer
-- Within organizational structures, the principles have transformed management paradigms
-- For individual development, the framework offers powerful tools for personal growth and understanding
+The meaningful differences emerge in how these approaches make us feel and what they prioritize:
 
-**Challenges and Limitations**
-No honest analysis would be complete without acknowledging the boundaries and ongoing questions:
-1. Methodological challenges in measuring certain qualitative aspects
-2. Cultural variability that complicates universal application
-3. Ethical considerations that continue to emerge as implementation expands
+• The first path offers clarity and certainty - you know exactly what to expect at each turn. This brings a sense of security and helps manage expectations, though it might feel constraining when unexpected opportunities arise.
 
-**Synthesis and Integration**
-Perhaps most exciting is how these various elements come together to create something greater than their individual contributions. The synergistic effect produces insights that wouldn't be possible from any single perspective.
+• The second path embraces flexibility and discovery - there's space for intuition and responsiveness to what emerges. This creates opportunities for meaningful connection and adaptation, though it requires comfort with uncertainty.
 
-Would you like me to explore any particular aspect of this analysis in greater depth?`;
+These approaches aren't simply "right" or "wrong" - they represent different values and priorities. Most people find their ideal approach incorporates elements of both, perhaps beginning with structure but allowing space for the journey to evolve naturally.
+
+What aspects of these approaches resonate most with what you're hoping to achieve?`;
   }
   
-  // Default response for other types of queries
-  return `Thank you for your question about ${getTopicFromPrompt(prompt)}. Let me share some thoughtful reflections:
+  // Default creative/empathetic response
+  return `Thank you for sharing your thoughts about ${getTopicFromPrompt(prompt)}. I've been reflecting on what you've shared, and I'd like to offer some perspectives that might be helpful.
 
-From my perspective, this topic invites us to consider multiple dimensions simultaneously. There's both a practical aspect—how these ideas manifest in tangible ways—and a conceptual framework that helps us make sense of the underlying patterns.
+There's something deeply human about navigating this topic - it touches on how we make sense of our experiences and connect with the world around us. When I consider the question you're exploring, I'm reminded of how often our most meaningful insights come from balancing different ways of understanding.
 
-What I find particularly fascinating is the way different perspectives on this subject reveal different truths, not in contradiction but in complementarity. It's reminiscent of the parable of the blind men and the elephant, where each person's description is accurate but incomplete without the others.
+I believe there are a few layers worth considering:
 
-If we examine historical contexts, we can trace how understanding has evolved through distinct phases:
-• Initial discovery and fundamental principles
-• Expansion and application across diverse domains
-• Critical reexamination and refinement
-• Integration with complementary frameworks
+First, the personal dimension - how this connects to your unique experiences and values. While I can offer perspectives based on general patterns, you bring essential wisdom from your own journey that deserves to be honored.
 
-The contemporary view tends to emphasize interconnectedness, acknowledging that isolated analysis often misses crucial dynamics that emerge from relationships between components.
+Second, the shared human experience - the common threads that connect diverse stories and viewpoints. Even when our paths differ, we often share similar hopes, questions, and challenges that can bridge our understanding.
 
-I'm curious about which aspects of this topic intrigue you most? There are many directions we could explore further.`;
+Third, the practical wisdom - thoughtful approaches that have emerged from both successes and setbacks, offering guideposts rather than rigid rules.
+
+Throughout these layers, I notice how often meaningful growth happens in the space between seemingly opposite ideas - the intersection of structure and spontaneity, tradition and innovation, certainty and openness.
+
+I wonder which of these dimensions feels most relevant to what you're exploring right now? I'm here to continue this conversation in whatever direction would be most helpful for you.`;
 }
 
 /**

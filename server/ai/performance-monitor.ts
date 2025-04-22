@@ -523,11 +523,14 @@ class PerformanceMonitor {
   private logMetricToFile(metric: Metric): void {
     try {
       // Extract metric properties and create a clean object for logging
-      const { timestamp, ...rest } = metric;
+      const { timestamp, name, value, type: metricType, tags } = metric;
       const logLine = JSON.stringify({
-        type: 'metric',
+        log_type: 'metric',
         timestamp: new Date(timestamp).toISOString(),
-        ...rest
+        name,
+        value,
+        metric_type: metricType,
+        tags
       });
       
       fs.appendFileSync(this.logFilePath, logLine + '\n');
@@ -546,7 +549,7 @@ class PerformanceMonitor {
       const { id, name, status, parentId, metadata } = operation;
       
       const logLine = JSON.stringify({
-        type: 'operation',
+        log_type: 'operation',
         event,
         id,
         name,

@@ -107,8 +107,13 @@ if (ENABLE_CLUSTERING && cluster.isPrimary) {
     next();
   });
 
-  // Use our sophisticated error handler middleware
-  app.use(errorHandler.errorMiddleware());
+  // Create our error handling middleware
+  const errorMiddleware = (err: Error, req: Request, res: Response, next: NextFunction) => {
+    errorHandler.handleError(err, req, res);
+  };
+
+  // Register the error middleware
+  app.use(errorMiddleware);
 
   (async () => {
     try {
