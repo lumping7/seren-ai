@@ -111,16 +111,27 @@ export function setupAuth(app: Express) {
     res.json(safeUser);
   });
   
-  // Create admin user if not exists
+  // Create admin user if not exists and initialize settings
   (async () => {
-    const adminExists = await storage.getUserByUsername("admin");
-    if (!adminExists) {
-      await storage.createUser({
-        username: "admin",
-        password: await hashPassword("admin123"),
-        isAdmin: true
-      });
-      console.log("Created admin user (username: admin, password: admin123)");
+    try {
+      const adminExists = await storage.getUserByUsername("admin");
+      let adminUser;
+      
+      if (!adminExists) {
+        adminUser = await storage.createUser({
+          username: "admin",
+          password: await hashPassword("admin123"),
+          isAdmin: true
+        });
+        console.log("Created admin user (username: admin, password: admin123)");
+      } else {
+        adminUser = adminExists;
+      }
+      
+      // Initialize settings with admin user ID
+      await storage.initializeSettings(adminUser.id);
+    } catch (error) {
+      console.error("Error setting up admin account:", error);
     }
   })();
 }

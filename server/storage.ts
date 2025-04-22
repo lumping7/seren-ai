@@ -34,11 +34,11 @@ export interface IStorage {
   updateSetting(key: string, value: any, userId: number): Promise<Setting>;
   
   // Session store
-  sessionStore: session.SessionStore;
+  sessionStore: any; // session store interface
 }
 
 export class DatabaseStorage implements IStorage {
-  sessionStore: session.SessionStore;
+  sessionStore: any; // session store interface
 
   constructor() {
     const PostgresSessionStore = connectPg(session);
