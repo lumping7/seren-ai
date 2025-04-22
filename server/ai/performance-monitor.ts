@@ -399,7 +399,7 @@ class PerformanceMonitor {
           }
           callback(null, chunk);
         } catch (error) {
-          callback(error);
+          callback(error instanceof Error ? error : new Error(String(error)));
         }
       }
     });
@@ -522,10 +522,12 @@ class PerformanceMonitor {
    */
   private logMetricToFile(metric: Metric): void {
     try {
+      // Extract metric properties and create a clean object for logging
+      const { timestamp, ...rest } = metric;
       const logLine = JSON.stringify({
         type: 'metric',
-        timestamp: new Date(metric.timestamp).toISOString(),
-        ...metric
+        timestamp: new Date(timestamp).toISOString(),
+        ...rest
       });
       
       fs.appendFileSync(this.logFilePath, logLine + '\n');
@@ -539,11 +541,20 @@ class PerformanceMonitor {
    */
   private logOperationToFile(event: 'start' | 'end', operation: Operation): void {
     try {
+      // Create a clean operation log by extracting necessary fields
+      const opTime = event === 'start' ? operation.startTime : (operation.endTime || Date.now());
+      const { id, name, status, parentId, metadata } = operation;
+      
       const logLine = JSON.stringify({
         type: 'operation',
         event,
-        timestamp: new Date(event === 'start' ? operation.startTime : (operation.endTime || Date.now())).toISOString(),
-        ...operation
+        id,
+        name,
+        status,
+        parentId,
+        metadata,
+        timestamp: new Date(opTime).toISOString(),
+        duration: operation.duration
       });
       
       fs.appendFileSync(this.logFilePath, logLine + '\n');

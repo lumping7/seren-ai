@@ -459,7 +459,7 @@ class ResourceManager {
    * Get active allocations count by operation type
    */
   public getActiveAllocationsByType(): Record<OperationType, number> {
-    const result: Partial<Record<OperationType, number>> = {};
+    const result: Record<string, number> = {};
     
     for (const allocation of this.activeAllocations.values()) {
       const type = allocation.operationType;

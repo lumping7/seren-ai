@@ -149,31 +149,56 @@ if (ENABLE_CLUSTERING && cluster.isPrimary) {
         serveStatic(app);
       }
 
-      // ALWAYS serve the app on port 5000
+      // ALWAYS serve the app on port 5000 or an alternative if it's in use
       // this serves both the API and the client.
       // It is the only port that is not firewalled.
-      const port = 5000;
-      server.listen({
-        port,
-        host: "0.0.0.0",
-        reusePort: true,
-      }, () => {
-        log(`serving on port ${port}`);
-        
-        // Log system information
-        const memoryUsage = process.memoryUsage();
-        const resourceInfo = {
-          pid: process.pid,
-          memoryRSS: `${Math.round(memoryUsage.rss / 1024 / 1024)} MB`,
-          memoryHeapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)} MB`,
-          memoryHeapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB`,
-          cpuCount: os.cpus().length,
-          nodeVersion: process.version,
-          environment: process.env.NODE_ENV || 'development'
-        };
-        
-        console.log(`[Server] Started with configuration:`, resourceInfo);
-      });
+      const portSequence = [5000, 5001, 5002, 5003, 5004, 5005]; // Try these ports in sequence
+      let currentPortIndex = 0;
+
+      const tryListen = (portIndex: number) => {
+        if (portIndex >= portSequence.length) {
+          console.error('[Server] All ports in sequence are busy. Cannot start server.');
+          process.exit(1);
+          return;
+        }
+
+        const port = portSequence[portIndex];
+        server.listen({
+          port,
+          host: "0.0.0.0",
+          reusePort: true,
+        })
+        .on('listening', () => {
+          log(`serving on port ${port}`);
+          
+          // Log system information
+          const memoryUsage = process.memoryUsage();
+          const resourceInfo = {
+            pid: process.pid,
+            memoryRSS: `${Math.round(memoryUsage.rss / 1024 / 1024)} MB`,
+            memoryHeapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)} MB`,
+            memoryHeapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB`,
+            cpuCount: os.cpus().length,
+            nodeVersion: process.version,
+            environment: process.env.NODE_ENV || 'development'
+          };
+          
+          console.log(`[Server] Started with configuration:`, resourceInfo);
+        })
+        .on('error', (err: any) => {
+          if (err.code === 'EADDRINUSE') {
+            console.log(`[Server] Port ${port} is busy. Trying next port...`);
+            server.close();
+            tryListen(portIndex + 1);
+          } else {
+            console.error('[Server] Error starting server:', err);
+            process.exit(1);
+          }
+        });
+      };
+
+      // Start the listening process
+      tryListen(currentPortIndex);
       
       // Graceful shutdown
       const gracefulShutdown = (signal: string) => {
