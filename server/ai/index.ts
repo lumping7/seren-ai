@@ -212,6 +212,130 @@ aiRouter.post('/hybrid/competitive', (req, res) => {
   hybridHandler(req, res);
 });
 
+// Import model integration and continuous execution systems
+import { initializeModelProcesses, getModelStatus, generateCode, enhanceCode, debugCode, explainCode } from './model-integration';
+import { 
+  startAutonomousProject, 
+  getProjectStatus, 
+  getProjectArtifacts, 
+  updateProjectExecution, 
+  registerContinuousExecutionRoutes 
+} from './continuous-execution';
+
+// Model integration endpoints
+aiRouter.get('/models/status', (req, res) => {
+  const status = getModelStatus();
+  res.json(status);
+});
+
+aiRouter.post('/models/generate', async (req, res) => {
+  try {
+    const { requirements, language, framework, architecture, primaryModel, timeout } = req.body;
+    
+    if (!requirements) {
+      return res.status(400).json({ error: 'Requirements are required' });
+    }
+    
+    const result = await generateCode(requirements, {
+      language,
+      framework,
+      architecture,
+      primaryModel,
+      timeout
+    });
+    
+    res.json(result);
+  } catch (error) {
+    errorHandler.handleError(error, req, res);
+  }
+});
+
+aiRouter.post('/models/enhance', async (req, res) => {
+  try {
+    const { code, requirements, language, enhancement, primaryModel, timeout } = req.body;
+    
+    if (!code) {
+      return res.status(400).json({ error: 'Code is required' });
+    }
+    
+    const result = await enhanceCode(code, {
+      requirements,
+      language,
+      enhancement,
+      primaryModel,
+      timeout
+    });
+    
+    res.json(result);
+  } catch (error) {
+    errorHandler.handleError(error, req, res);
+  }
+});
+
+aiRouter.post('/models/debug', async (req, res) => {
+  try {
+    const { code, error: codeError, language, primaryModel, timeout } = req.body;
+    
+    if (!code) {
+      return res.status(400).json({ error: 'Code is required' });
+    }
+    
+    if (!codeError) {
+      return res.status(400).json({ error: 'Error message is required' });
+    }
+    
+    const result = await debugCode(code, codeError, {
+      language,
+      primaryModel,
+      timeout
+    });
+    
+    res.json(result);
+  } catch (error) {
+    errorHandler.handleError(error, req, res);
+  }
+});
+
+aiRouter.post('/models/explain', async (req, res) => {
+  try {
+    const { code, language, detail_level, primaryModel, timeout } = req.body;
+    
+    if (!code) {
+      return res.status(400).json({ error: 'Code is required' });
+    }
+    
+    const result = await explainCode(code, {
+      language,
+      detail_level,
+      primaryModel,
+      timeout
+    });
+    
+    res.json(result);
+  } catch (error) {
+    errorHandler.handleError(error, req, res);
+  }
+});
+
+// Continuous execution endpoints
+aiRouter.post('/continuous/project', startAutonomousProject);
+aiRouter.get('/continuous/project/:id', getProjectStatus);
+aiRouter.get('/continuous/project/:id/artifacts/:artifactType?', getProjectArtifacts);
+aiRouter.post('/continuous/project/:id/action', updateProjectExecution);
+
+// Register additional continuous execution routes
+registerContinuousExecutionRoutes(aiRouter);
+
+// Initialize model processes when server starts
+(async () => {
+  try {
+    const initialized = await initializeModelProcesses();
+    console.log(`[AI] Model processes ${initialized ? 'successfully initialized' : 'failed to initialize'}`);
+  } catch (error) {
+    console.error('[AI] Error initializing model processes:', error);
+  }
+})();
+
 // Error handler
 aiRouter.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   errorHandler.handleError(err, req, res);

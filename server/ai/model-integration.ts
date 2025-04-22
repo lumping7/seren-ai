@@ -242,7 +242,7 @@ async function startModelProcess(model: ModelType): Promise<void> {
     });
     
     // Handle process errors
-    process.on('error', (error) => {
+    process.on('error', (error: Error) => {
       console.error(`[ModelIntegration] ${model} process error:`, error);
       modelProcess.status = ModelStatus.FAILING;
       modelProcess.stats.lastError = error.message;
