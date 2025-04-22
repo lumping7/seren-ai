@@ -19,18 +19,13 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
-# Try to import PyTorch
-try:
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-    from torch.optim import Adam
-    from torch.utils.data import Dataset, DataLoader
-    from torch.cuda.amp import autocast, GradScaler
-    has_torch = True
-except ImportError:
-    has_torch = False
-    logging.warning("PyTorch not available. Liquid Neural Network will be simulated.")
+# Import PyTorch
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.optim import Adam
+from torch.utils.data import Dataset, DataLoader
+from torch.cuda.amp import autocast, GradScaler
 
 # Configure logging
 logging.basicConfig(
@@ -1068,14 +1063,6 @@ class ContinuousLearningSystem:
         Returns:
             Predictions [batch_size, output_dim]
         """
-        if not has_torch:
-            # Simulation mode
-            if isinstance(inputs, torch.Tensor):
-                batch_size = inputs.shape[0]
-            else:
-                batch_size = 1
-            return torch.randn(batch_size, self.output_dim)
-        
         # Default for use_memory
         if use_memory is None:
             use_memory = self.use_memory
@@ -1124,9 +1111,6 @@ class ContinuousLearningSystem:
         Returns:
             Continuous learning results
         """
-        if not has_torch:
-            return {"error": "PyTorch not available"}
-        
         # Track results
         results = {
             "iterations": 0,
@@ -1186,10 +1170,6 @@ class ContinuousLearningSystem:
         Args:
             path: Path to save to
         """
-        if not has_torch:
-            logger.warning("PyTorch not available. Cannot save model.")
-            return
-        
         save_dict = {
             'network': self.network.state_dict(),
             'input_dim': self.input_dim,
@@ -1218,10 +1198,6 @@ class ContinuousLearningSystem:
         Returns:
             Loaded system
         """
-        if not has_torch:
-            logger.warning("PyTorch not available. Cannot load model.")
-            return None
-        
         checkpoint = torch.load(path, map_location=device)
         
         # Create system
@@ -1267,10 +1243,6 @@ def create_continuous_learning_system(
     Returns:
         Continuous learning system
     """
-    if not has_torch:
-        logger.warning("PyTorch not available. Cannot create learning system.")
-        return None
-    
     system = ContinuousLearningSystem(
         input_dim=input_dim,
         output_dim=output_dim,

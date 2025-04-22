@@ -12,6 +12,7 @@ import logging
 import time
 import math
 import re
+import random
 import datetime
 from enum import Enum, auto
 from typing import Dict, List, Tuple, Set, Optional, Any, Union, Callable
@@ -21,30 +22,14 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
-# Try to import required libraries
-try:
-    import numpy as np
-    has_numpy = True
-except ImportError:
-    has_numpy = False
-    logging.warning("NumPy not available. Some reasoning capabilities may be limited.")
-
-try:
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-    has_torch = True
-except ImportError:
-    has_torch = False
-    logging.warning("PyTorch not available. Neural reasoning will be simulated.")
+# Import required libraries
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 # Local imports
-try:
-    from ai_core.knowledge.library import knowledge_library
-    has_knowledge_lib = True
-except ImportError:
-    has_knowledge_lib = False
-    logging.warning("Knowledge library not available. Reasoning will use limited knowledge.")
+from ai_core.knowledge.library import knowledge_library
 
 # Configure logging
 logging.basicConfig(
