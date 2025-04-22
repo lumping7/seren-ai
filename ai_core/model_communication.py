@@ -38,13 +38,8 @@ except ImportError:
         QWEN = "qwen"
         OLYMPIC = "olympic"
 
-# Try to import knowledge library
-try:
-    from ai_core.knowledge.library import knowledge_library, KnowledgeSource
-    has_knowledge_lib = True
-except ImportError:
-    has_knowledge_lib = False
-    logging.warning("Knowledge library not available. Knowledge sharing will be disabled.")
+# Import knowledge library
+from ai_core.knowledge.library import knowledge_library, KnowledgeSource
 
 # Configure logging
 logging.basicConfig(
@@ -344,8 +339,9 @@ class CommunicationSystem:
         Returns:
             Success status
         """
-        if not has_knowledge_lib:
-            logger.warning("Knowledge library not available. Knowledge sharing disabled.")
+        # Verify knowledge library is correctly initialized
+        if not hasattr(knowledge_library, "add_knowledge_entry"):
+            logger.error("Knowledge library is not properly initialized.")
             return False
         
         # Add to knowledge library if requested
@@ -529,8 +525,9 @@ class CommunicationSystem:
         Returns:
             Success status
         """
-        if not has_knowledge_lib:
-            logger.warning("Knowledge library not available. Export disabled.")
+        # Verify knowledge library is correctly initialized
+        if not hasattr(knowledge_library, "get_entries_by_model"):
+            logger.error("Knowledge library is not properly initialized for export.")
             return False
         
         # Get entries created by the model
@@ -565,8 +562,9 @@ class CommunicationSystem:
         Returns:
             List of matching knowledge entries
         """
-        if not has_knowledge_lib:
-            logger.warning("Knowledge library not available. Search disabled.")
+        # Verify knowledge library is correctly initialized
+        if not hasattr(knowledge_library, "search_knowledge"):
+            logger.error("Knowledge library is not properly initialized for search.")
             return []
         
         # Search knowledge
