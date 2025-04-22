@@ -637,6 +637,115 @@ class LiquidNeuralNetwork(nn.Module):
         self.loss_history[self.loss_idx] = loss
         self.loss_idx = (self.loss_idx + 1) % self.loss_history.size(0)
     
+    def optimize_parameters(self, num_iterations=10, learning_rate=1e-4):
+        """
+        Optimize network parameters for better performance
+        
+        Args:
+            num_iterations: Number of optimization iterations
+            learning_rate: Learning rate for optimization
+            
+        Returns:
+            Optimization results
+        """
+        logger.info(f"Optimizing network parameters with {num_iterations} iterations")
+        
+        # Create a temporary optimizer with specified learning rate
+        optimizer = Adam(self.parameters(), lr=learning_rate)
+        
+        # Synthetic data for self-optimization
+        batch_size = 16
+        input_data = torch.randn(batch_size, self.input_dim, device=self.device)
+        
+        # Track optimization progress
+        initial_states = {}
+        for i, block in enumerate(self.blocks):
+            initial_states[f"block_{i}_weights"] = torch.norm(
+                torch.cat([p.flatten() for p in block.parameters()])
+            ).item()
+        
+        # Optimization iterations
+        for iteration in range(num_iterations):
+            # Forward pass to generate activations
+            with autocast():
+                # Reset state to ensure clean optimization
+                self.reset_states()
+                
+                # Forward pass collecting intermediate activations
+                x = self.input_projection(input_data)
+                activations = [x]
+                
+                for block in self.blocks:
+                    x, _ = block(x)
+                    activations.append(x)
+                
+                # Output projection
+                output = self.output_projection(x)
+                
+                # Compute optimization objectives:
+                
+                # 1. Minimize activation redundancy (encourage diversity)
+                act_similarity_loss = 0
+                for act in activations:
+                    # Normalize activations
+                    act_norm = F.normalize(act, p=2, dim=1)
+                    # Compute pairwise similarities
+                    similarity = torch.matmul(act_norm, act_norm.transpose(0, 1))
+                    # Remove diagonal (self-similarity)
+                    mask = ~torch.eye(similarity.shape[0], dtype=torch.bool, device=similarity.device)
+                    # Compute mean similarity and add to loss
+                    act_similarity_loss += torch.mean(torch.abs(similarity[mask]))
+                
+                # 2. Encourage appropriate activation sparsity
+                sparsity_loss = 0
+                target_sparsity = 0.4  # Target 40% of neurons active
+                for act in activations:
+                    # Calculate actual sparsity
+                    binary_act = (act > 0).float()
+                    actual_sparsity = torch.mean(binary_act)
+                    # Penalize deviation from target
+                    sparsity_loss += torch.abs(actual_sparsity - target_sparsity)
+                
+                # 3. Minimize parameter magnitudes (L2 regularization)
+                l2_reg = 0
+                for param in self.parameters():
+                    l2_reg += torch.norm(param)
+                
+                # Combine losses with appropriate weights
+                loss = (
+                    0.5 * act_similarity_loss +
+                    0.3 * sparsity_loss +
+                    0.1 * l2_reg
+                )
+            
+            # Backward pass and optimization
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            if iteration % 2 == 0:
+                logger.info(f"Optimization iteration {iteration}, Loss: {loss.item():.4f}")
+        
+        # Calculate changes in weights
+        final_states = {}
+        changes = {}
+        for i, block in enumerate(self.blocks):
+            final_states[f"block_{i}_weights"] = torch.norm(
+                torch.cat([p.flatten() for p in block.parameters()])
+            ).item()
+            changes[f"block_{i}_change"] = abs(
+                final_states[f"block_{i}_weights"] - initial_states[f"block_{i}_weights"]
+            )
+        
+        # Return optimization summary
+        return {
+            "iterations": num_iterations,
+            "initial_states": initial_states,
+            "final_states": final_states,
+            "parameter_changes": changes,
+            "final_loss": loss.item()
+        }
+    
     def train_step(
         self,
         x: torch.Tensor,
@@ -977,8 +1086,11 @@ class ContinuousLearningSystem:
         Returns:
             Training results
         """
-        if not has_torch:
-            return {"error": "PyTorch not available"}
+        # Ensure tensors are in the correct format
+        if not isinstance(inputs, torch.Tensor):
+            inputs = torch.tensor(inputs, dtype=torch.float32)
+        if not isinstance(targets, torch.Tensor):
+            targets = torch.tensor(targets, dtype=torch.float32)
         
         # Move to device
         inputs = inputs.to(self.device)
