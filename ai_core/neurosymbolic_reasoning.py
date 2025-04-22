@@ -450,7 +450,7 @@ class KnowledgeBase:
         self.formulas = []
         self.rules = []
         self.predicates = {}  # name -> Predicate
-        self.neural_weights = {} if has_torch else None
+        self.neural_weights = {}
     
     def add_formula(self, formula: Formula) -> bool:
         """
@@ -737,10 +737,6 @@ class LiquidNeuralNetwork(nn.Module):
         
     def forward(self, x, reset_state: bool = False):
         """Forward pass"""
-        if not has_torch:
-            # Simulation mode
-            return torch.rand(x.shape[0], self.output_size)
-        
         # Initialize or reset hidden states
         if self.hidden_states is None or reset_state:
             self.hidden_states = [None] * self.num_layers
@@ -816,10 +812,6 @@ class LiquidLayer(nn.Module):
         Returns:
             (output, new_state)
         """
-        if not has_torch:
-            # Simulation mode
-            return torch.rand(x.shape[0], self.hidden_size), torch.rand(x.shape[0], self.hidden_size)
-            
         # Initialize state if needed
         if prev_state is None:
             prev_state = torch.zeros_like(x[:, :self.hidden_size])
@@ -882,22 +874,21 @@ class SymbolicTranslator:
         self.idx_to_symbol = {}
         
         # Embeddings
-        if has_torch:
-            self.symbol_embeddings = nn.Embedding(vocabulary_size, embedding_size)
-            self.formula_encoder = nn.LSTM(
-                embedding_size, 
-                embedding_size, 
-                num_layers=2,
-                bidirectional=True,
-                batch_first=True
-            )
-            self.formula_decoder = nn.LSTM(
-                embedding_size,
-                embedding_size * 2,
-                num_layers=2,
-                batch_first=True
-            )
-            self.projection = nn.Linear(embedding_size * 2, vocabulary_size)
+        self.symbol_embeddings = nn.Embedding(vocabulary_size, embedding_size)
+        self.formula_encoder = nn.LSTM(
+            embedding_size, 
+            embedding_size, 
+            num_layers=2,
+            bidirectional=True,
+            batch_first=True
+        )
+        self.formula_decoder = nn.LSTM(
+            embedding_size,
+            embedding_size * 2,
+            num_layers=2,
+            batch_first=True
+        )
+        self.projection = nn.Linear(embedding_size * 2, vocabulary_size)
         
     def neural_to_symbolic(self, neural_output, threshold: float = 0.5) -> Formula:
         """
@@ -2296,15 +2287,55 @@ class NeuroSymbolicReasoning:
         # Apply metacognitive improvements
         improvement_result = self.metacognition.improve_reasoning()
         
-        # Optimize neural components if available
-        if has_torch and self.liquid_network is not None:
-            # Simulate optimization
+        # Optimize neural components
+        if self.liquid_network is not None:
+            # Perform real optimization of network parameters
+            self.liquid_network.optimize_parameters()
+            
+            # Record optimization results
             improvement_result["neural_optimization"] = {
-                "status": "simulated",
-                "message": "Liquid network parameters adjusted"
+                "status": "completed",
+                "message": "Liquid network parameters optimized",
+                "timestamp": time.time()
             }
         
         return improvement_result
+    
+    def is_reasoning_active(self) -> bool:
+        """
+        Check if reasoning processes are currently active
+        
+        Returns:
+            True if reasoning processes are active, False otherwise
+        """
+        # Check if we have active reasoning tasks
+        if hasattr(self, 'active_tasks') and self.active_tasks:
+            return True
+            
+        # Check if reasoning has been used recently (within last 10 seconds)
+        current_time = time.time()
+        if hasattr(self, 'last_reasoning_time') and current_time - self.last_reasoning_time < 10:
+            return True
+            
+        # Check if continuous reasoning is active
+        if hasattr(self, 'continuous_reasoning_active') and self.continuous_reasoning_active:
+            return True
+            
+        return False
+    
+    def get_confidence_score(self) -> float:
+        """
+        Get the current confidence score of the reasoning system
+        
+        Returns:
+            Confidence score between 0.0 and 1.0
+        """
+        # Base confidence on recent reasoning results
+        if hasattr(self, 'recent_confidences') and self.recent_confidences:
+            return sum(self.recent_confidences) / len(self.recent_confidences)
+            
+        # If no recent reasoning, use default confidence
+        return 0.7
 
 # Initialize the reasoning system
 neurosymbolic_reasoning = NeuroSymbolicReasoning(
