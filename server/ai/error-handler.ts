@@ -6,12 +6,12 @@
  * and graceful degradation capabilities.
  */
 
-import { Request, Response, NextFunction } from 'express';
-import { performanceMonitor } from './performance-monitor';
 import fs from 'fs';
 import path from 'path';
+import { Request, Response, NextFunction } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 
-// Error categorization
+// Error categories
 export enum ErrorCategory {
   VALIDATION = 'validation',
   RESOURCE_LIMIT = 'resource_limit',
@@ -52,7 +52,7 @@ enum CircuitState {
   HALF_OPEN // Testing if system has recovered
 }
 
-// Circuit breaker tracking for different services
+// Circuit breaker configuration
 interface CircuitBreaker {
   service: string;
   state: CircuitState;
@@ -72,25 +72,20 @@ export class ErrorHandler {
   private static instance: ErrorHandler;
   private errorLog: ErrorData[] = [];
   private circuitBreakers: Map<string, CircuitBreaker> = new Map();
-  private logEnabled: boolean;
+  private logEnabled: boolean = true;
   private logPath: string;
   private maxLogSize: number = 100; // Max number of errors to keep in memory
   
-  /**
-   * Private constructor - use getInstance()
-   */
   private constructor() {
-    this.logEnabled = process.env.ENABLE_ERROR_LOGS === 'true';
-    this.logPath = process.env.ERROR_LOG_PATH || './logs/errors';
+    this.logPath = path.join(process.cwd(), 'logs', 'errors.log');
     
-    // Ensure log directory exists
-    if (this.logEnabled) {
+    // Create log directory if it doesn't exist
+    const logDir = path.dirname(this.logPath);
+    if (!fs.existsSync(logDir)) {
       try {
-        fs.mkdirSync(this.logPath, { recursive: true });
-        console.log(`[ErrorHandler] Log directory created: ${this.logPath}`);
+        fs.mkdirSync(logDir, { recursive: true });
       } catch (error) {
-        console.error(`[ErrorHandler] Error creating log directory: ${error}`);
-        this.logEnabled = false;
+        console.error(`[ErrorHandler] Failed to create log directory: ${error}`);
       }
     }
     
@@ -114,22 +109,26 @@ export class ErrorHandler {
    * Initialize circuit breakers for key services
    */
   private initializeCircuitBreakers(): void {
+    // Define circuit breakers for critical services
     const services = [
-      'llama3', 'gemma3', 'hybrid', 'database', 
-      'reasoning', 'knowledge', 'conversation'
+      'llama3_api',
+      'gemma3_api',
+      'database',
+      'knowledge_base',
+      'reasoning_engine'
     ];
     
-    services.forEach(service => {
+    for (const service of services) {
       this.circuitBreakers.set(service, {
         service,
         state: CircuitState.CLOSED,
         failureCount: 0,
-        failureThreshold: 5, // 5 consecutive failures
+        failureThreshold: 5, // After 5 failures
         resetTimeout: 30000, // 30 seconds
         lastFailureTime: 0,
         openUntil: 0
       });
-    });
+    }
   }
   
   /**
@@ -143,24 +142,23 @@ export class ErrorHandler {
     this.trackError(errorData);
     
     // Log error
-    this.logError(errorData);
-    
-    // Update circuit breaker if service-specific
-    if (errorData.details?.service) {
-      this.updateCircuitBreaker(errorData.details.service);
+    if (this.logEnabled) {
+      this.logError(errorData);
     }
     
-    // Send error response if response object provided
-    if (res && !res.headersSent) {
+    // Update circuit breaker if applicable
+    if (error.service) {
+      this.updateCircuitBreaker(error.service);
+    }
+    
+    // If response object provided, send error response
+    if (res) {
       const statusCode = this.getHttpStatusCode(errorData.category);
-      
-      // Send appropriate HTTP response
       res.status(statusCode).json({
         error: errorData.message,
+        error_id: errorData.requestId,
         category: errorData.category,
         timestamp: errorData.timestamp,
-        request_id: errorData.requestId,
-        retryable: errorData.retryable,
         resolution: errorData.resolution
       });
     }
@@ -172,27 +170,45 @@ export class ErrorHandler {
    * Create structured error data object from an error
    */
   private createErrorData(error: any, req?: Request): ErrorData {
-    // Determine error category
-    const category = this.categorizeError(error);
+    // Extract original error message if it's wrapped
+    let message = error.message || 'Unknown error occurred';
+    if (typeof error === 'string') {
+      message = error;
+    }
     
-    // Determine error severity
+    // Generate a request ID if not provided
+    const requestId = 
+      (req && req.headers['x-request-id'] as string) || 
+      `err-${uuidv4().split('-')[0]}`;
+    
+    // Get path from request if available
+    const path = req ? req.path : undefined;
+    
+    // Categorize error
+    const category = 
+      error.category || 
+      this.categorizeError(error);
+    
+    // Assess severity
     const severity = this.assessSeverity(category, error);
     
-    // Determine if error is retryable
+    // Determine if retryable
     const retryable = this.isRetryable(category, error);
     
-    // Create error data
+    // Suggest resolution
+    const resolution = this.suggestResolution(category, error);
+    
     const errorData: ErrorData = {
       category,
       severity,
-      message: error.message || 'An unknown error occurred',
-      details: error.details || {},
+      message,
+      details: error.details || undefined,
       stack: error.stack,
-      requestId: req?.headers['x-request-id'] as string || error.requestId,
+      requestId,
       timestamp: new Date(),
-      path: req?.path,
+      path,
       retryable,
-      resolution: this.suggestResolution(category, error)
+      resolution
     };
     
     return errorData;
@@ -202,34 +218,83 @@ export class ErrorHandler {
    * Categorize an error based on its properties
    */
   private categorizeError(error: any): ErrorCategory {
-    if (error.name === 'ValidationError' || error.code === 'VALIDATION_ERROR') {
+    // Check for validation errors
+    if (
+      error.name === 'ValidationError' || 
+      error.name === 'ZodError' ||
+      (error.details && error.details.some) ||
+      error.message?.includes('validation')
+    ) {
       return ErrorCategory.VALIDATION;
     }
     
-    if (error.name === 'ResourceLimitError' || error.code === 'RESOURCE_LIMIT_EXCEEDED') {
+    // Check for resource limit errors
+    if (
+      error.message?.includes('memory') ||
+      error.message?.includes('capacity') ||
+      error.message?.includes('limit') ||
+      error.message?.includes('quota') ||
+      error.code === 'ENOMEM'
+    ) {
       return ErrorCategory.RESOURCE_LIMIT;
     }
     
-    if (error.name === 'ModelError' || error.code === 'MODEL_ERROR') {
+    // Check for model errors
+    if (
+      error.message?.includes('model') ||
+      error.message?.includes('inference') ||
+      error.message?.includes('prediction')
+    ) {
       return ErrorCategory.MODEL_ERROR;
     }
     
-    if (error.name === 'DatabaseError' || error.code?.startsWith('DB_') || error.code?.startsWith('PG_')) {
+    // Check for database errors
+    if (
+      error.name === 'SequelizeError' ||
+      error.name === 'MongoError' ||
+      error.code === 'SQLITE_ERROR' ||
+      error.message?.includes('database') ||
+      error.message?.includes('query') ||
+      error.message?.includes('SQL')
+    ) {
       return ErrorCategory.DATABASE_ERROR;
     }
     
-    if (error.name === 'NetworkError' || error.code === 'NETWORK_ERROR' || error.code === 'ECONNREFUSED') {
+    // Check for network errors
+    if (
+      error.code === 'ECONNREFUSED' ||
+      error.code === 'ECONNRESET' ||
+      error.code === 'ETIMEDOUT' ||
+      error.name === 'NetworkError' ||
+      error.message?.includes('network') ||
+      error.message?.includes('connection') ||
+      error.message?.includes('timeout')
+    ) {
       return ErrorCategory.NETWORK_ERROR;
     }
     
-    if (error.name === 'AuthorizationError' || error.status === 401 || error.status === 403) {
+    // Check for authorization errors
+    if (
+      error.name === 'UnauthorizedError' ||
+      error.status === 401 ||
+      error.status === 403 ||
+      error.message?.includes('auth') ||
+      error.message?.includes('permission') ||
+      error.message?.includes('token')
+    ) {
       return ErrorCategory.AUTHORIZATION_ERROR;
     }
     
-    if (error.name === 'InternalError' || error.code === 'INTERNAL_ERROR') {
+    // Internal errors include any errors explicitly marked as internal or thrown by our code
+    if (
+      error.internal === true ||
+      error.isInternal ||
+      error.message?.includes('internal')
+    ) {
       return ErrorCategory.INTERNAL_ERROR;
     }
     
+    // Default to unknown
     return ErrorCategory.UNKNOWN_ERROR;
   }
   
@@ -237,74 +302,87 @@ export class ErrorHandler {
    * Assess error severity based on category and details
    */
   private assessSeverity(category: ErrorCategory, error: any): ErrorSeverity {
-    switch (category) {
-      case ErrorCategory.VALIDATION:
-        return ErrorSeverity.LOW;
-        
-      case ErrorCategory.RESOURCE_LIMIT:
-        return error.details?.critical ? ErrorSeverity.HIGH : ErrorSeverity.MEDIUM;
-        
-      case ErrorCategory.MODEL_ERROR:
-        return ErrorSeverity.MEDIUM;
-        
-      case ErrorCategory.DATABASE_ERROR:
-        return error.details?.connection ? ErrorSeverity.HIGH : ErrorSeverity.MEDIUM;
-        
-      case ErrorCategory.NETWORK_ERROR:
-        return ErrorSeverity.HIGH;
-        
-      case ErrorCategory.AUTHORIZATION_ERROR:
-        return ErrorSeverity.LOW;
-        
-      case ErrorCategory.INTERNAL_ERROR:
-        return ErrorSeverity.HIGH;
-        
-      case ErrorCategory.UNKNOWN_ERROR:
-        return ErrorSeverity.MEDIUM;
-        
-      default:
-        return ErrorSeverity.MEDIUM;
+    // Critical errors
+    if (
+      category === ErrorCategory.RESOURCE_LIMIT ||
+      (category === ErrorCategory.DATABASE_ERROR && !error.message?.includes('transient'))
+    ) {
+      return ErrorSeverity.CRITICAL;
     }
+    
+    // High severity errors
+    if (
+      category === ErrorCategory.MODEL_ERROR ||
+      category === ErrorCategory.NETWORK_ERROR ||
+      category === ErrorCategory.INTERNAL_ERROR
+    ) {
+      return ErrorSeverity.HIGH;
+    }
+    
+    // Medium severity errors
+    if (
+      category === ErrorCategory.AUTHORIZATION_ERROR ||
+      (category === ErrorCategory.DATABASE_ERROR && error.message?.includes('transient'))
+    ) {
+      return ErrorSeverity.MEDIUM;
+    }
+    
+    // Low severity errors
+    if (
+      category === ErrorCategory.VALIDATION ||
+      category === ErrorCategory.UNKNOWN_ERROR
+    ) {
+      return ErrorSeverity.LOW;
+    }
+    
+    return ErrorSeverity.MEDIUM;
   }
   
   /**
    * Determine if an error is retryable
    */
   private isRetryable(category: ErrorCategory, error: any): boolean {
-    // Check if error has explicit retryable property
-    if (typeof error.retryable === 'boolean') {
-      return error.retryable;
+    // Generally, these categories are retryable
+    if (
+      category === ErrorCategory.NETWORK_ERROR ||
+      category === ErrorCategory.RESOURCE_LIMIT
+    ) {
+      return true;
     }
     
-    // Determine based on category
-    switch (category) {
-      case ErrorCategory.VALIDATION:
-        return false; // Validation errors won't succeed on retry
-        
-      case ErrorCategory.RESOURCE_LIMIT:
-        return true; // Resource limits may clear up
-        
-      case ErrorCategory.MODEL_ERROR:
-        return !error.details?.permanent; // Model errors may be temporary
-        
-      case ErrorCategory.DATABASE_ERROR:
-        return !error.details?.data_integrity; // Data integrity issues aren't retryable
-        
-      case ErrorCategory.NETWORK_ERROR:
-        return true; // Network errors are often temporary
-        
-      case ErrorCategory.AUTHORIZATION_ERROR:
-        return false; // Auth errors require user action
-        
-      case ErrorCategory.INTERNAL_ERROR:
-        return false; // Internal errors likely need fixes
-        
-      case ErrorCategory.UNKNOWN_ERROR:
-        return true; // Unknown errors - safe to retry
-        
-      default:
-        return false;
+    // Some database errors are retryable
+    if (
+      category === ErrorCategory.DATABASE_ERROR && 
+      (
+        error.message?.includes('deadlock') ||
+        error.message?.includes('lock') ||
+        error.message?.includes('timeout') ||
+        error.message?.includes('transient')
+      )
+    ) {
+      return true;
     }
+    
+    // Some model errors might be retryable
+    if (
+      category === ErrorCategory.MODEL_ERROR &&
+      (
+        error.message?.includes('timeout') ||
+        error.message?.includes('overloaded')
+      )
+    ) {
+      return true;
+    }
+    
+    // Non-retryable categories
+    if (
+      category === ErrorCategory.VALIDATION ||
+      category === ErrorCategory.AUTHORIZATION_ERROR
+    ) {
+      return false;
+    }
+    
+    return false;
   }
   
   /**
@@ -313,31 +391,28 @@ export class ErrorHandler {
   private suggestResolution(category: ErrorCategory, error: any): string {
     switch (category) {
       case ErrorCategory.VALIDATION:
-        return 'Check input parameters and ensure they match the required format.';
-        
+        return 'Check input parameters for validity and correct format.';
+      
       case ErrorCategory.RESOURCE_LIMIT:
-        return 'The system is currently at capacity. Please retry later or reduce the complexity of your request.';
-        
+        return 'Reduce request complexity or wait and try again later.';
+      
       case ErrorCategory.MODEL_ERROR:
-        return 'The AI model encountered an issue. Please try with different input parameters or a different model.';
-        
+        return 'Retry with simplified input or try an alternative model.';
+      
       case ErrorCategory.DATABASE_ERROR:
-        return 'Database operation failed. Please ensure data is valid and try again.';
-        
+        return 'Check database connection and retry operation.';
+      
       case ErrorCategory.NETWORK_ERROR:
-        return 'Network connection issue detected. Please check your connection and retry.';
-        
+        return 'Check network connectivity and retry operation.';
+      
       case ErrorCategory.AUTHORIZATION_ERROR:
-        return 'Authentication or authorization failed. Please check your credentials.';
-        
+        return 'Verify credentials and permissions.';
+      
       case ErrorCategory.INTERNAL_ERROR:
-        return 'An internal system error occurred. Please contact support if the issue persists.';
-        
-      case ErrorCategory.UNKNOWN_ERROR:
-        return 'An unexpected error occurred. Please retry or contact support if the issue persists.';
-        
+        return 'Report issue to system administrators.';
+      
       default:
-        return 'Please retry or contact support if the issue persists.';
+        return 'Review the request and try again.';
     }
   }
   
@@ -348,28 +423,25 @@ export class ErrorHandler {
     switch (category) {
       case ErrorCategory.VALIDATION:
         return 400; // Bad Request
-        
+      
       case ErrorCategory.RESOURCE_LIMIT:
         return 429; // Too Many Requests
-        
+      
       case ErrorCategory.MODEL_ERROR:
-        return 422; // Unprocessable Entity
-        
-      case ErrorCategory.DATABASE_ERROR:
         return 500; // Internal Server Error
-        
+      
+      case ErrorCategory.DATABASE_ERROR:
+        return 503; // Service Unavailable
+      
       case ErrorCategory.NETWORK_ERROR:
         return 503; // Service Unavailable
-        
+      
       case ErrorCategory.AUTHORIZATION_ERROR:
         return 401; // Unauthorized
-        
+      
       case ErrorCategory.INTERNAL_ERROR:
         return 500; // Internal Server Error
-        
-      case ErrorCategory.UNKNOWN_ERROR:
-        return 500; // Internal Server Error
-        
+      
       default:
         return 500; // Internal Server Error
     }
@@ -379,52 +451,35 @@ export class ErrorHandler {
    * Track error in memory
    */
   private trackError(errorData: ErrorData): void {
-    // Add to in-memory error log
     this.errorLog.push(errorData);
     
-    // Limit size of error log
+    // Limit the size of the error log
     if (this.errorLog.length > this.maxLogSize) {
       this.errorLog.shift();
     }
-    
-    // Track in performance monitor for metrics
-    performanceMonitor.endOperation(
-      errorData.requestId || 'unknown', 
-      true
-    );
   }
   
   /**
    * Log error to file
    */
   private logError(errorData: ErrorData): void {
-    // Always log critical errors to console
-    if (errorData.severity === ErrorSeverity.CRITICAL) {
-      console.error(`[CRITICAL ERROR] ${errorData.message}`, {
-        category: errorData.category,
-        path: errorData.path,
+    try {
+      const logEntry = JSON.stringify({
+        timestamp: errorData.timestamp.toISOString(),
         requestId: errorData.requestId,
-        timestamp: errorData.timestamp
-      });
-    } else if (errorData.severity === ErrorSeverity.HIGH) {
-      console.error(`[ERROR] ${errorData.message}`, {
         category: errorData.category,
+        severity: errorData.severity,
+        message: errorData.message,
         path: errorData.path,
-        requestId: errorData.requestId
+        details: errorData.details,
+        stack: errorData.stack,
+        retryable: errorData.retryable,
+        resolution: errorData.resolution
       });
-    }
-    
-    // Write to log file if enabled
-    if (this.logEnabled) {
-      try {
-        const logFile = path.join(this.logPath, `errors-${new Date().toISOString().split('T')[0]}.log`);
-        fs.appendFileSync(logFile, JSON.stringify({
-          ...errorData,
-          timestamp: errorData.timestamp.toISOString()
-        }) + '\n');
-      } catch (error) {
-        console.error(`[ErrorHandler] Error writing to log file: ${error}`);
-      }
+      
+      fs.appendFileSync(this.logPath, logEntry + '\n');
+    } catch (error) {
+      console.error('[ErrorHandler] Failed to log error:', error);
     }
   }
   
@@ -437,38 +492,36 @@ export class ErrorHandler {
     
     const now = Date.now();
     
+    // Update based on current state
     switch (breaker.state) {
       case CircuitState.CLOSED:
-        // In closed state, increment failure count
+        // Increment failure count
         breaker.failureCount++;
         breaker.lastFailureTime = now;
         
-        // Check if failure threshold is reached
+        // Check if threshold exceeded
         if (breaker.failureCount >= breaker.failureThreshold) {
           breaker.state = CircuitState.OPEN;
           breaker.openUntil = now + breaker.resetTimeout;
-          console.warn(`[ErrorHandler] Circuit breaker opened for service: ${service}`);
+          console.warn(`[ErrorHandler] Circuit breaker opened for ${service}`);
         }
         break;
-        
+      
       case CircuitState.OPEN:
-        // In open state, check if it's time to try again
+        // Check if it's time to try again
         if (now > breaker.openUntil) {
           breaker.state = CircuitState.HALF_OPEN;
-          console.info(`[ErrorHandler] Circuit breaker half-open for service: ${service}`);
+          console.log(`[ErrorHandler] Circuit breaker half-opened for ${service}`);
         }
         break;
-        
+      
       case CircuitState.HALF_OPEN:
-        // In half-open state, failure means going back to open
+        // Failed again in half-open state
         breaker.state = CircuitState.OPEN;
         breaker.openUntil = now + breaker.resetTimeout;
-        console.warn(`[ErrorHandler] Circuit breaker re-opened for service: ${service}`);
+        console.warn(`[ErrorHandler] Circuit breaker re-opened for ${service}`);
         break;
     }
-    
-    // Update the circuit breaker
-    this.circuitBreakers.set(service, breaker);
   }
   
   /**
@@ -478,22 +531,22 @@ export class ErrorHandler {
     const breaker = this.circuitBreakers.get(service);
     if (!breaker) return;
     
+    // Update based on current state
     switch (breaker.state) {
       case CircuitState.CLOSED:
-        // Reset failure count on success
+        // Reset failure count after successful operation
         breaker.failureCount = 0;
         break;
-        
+      
       case CircuitState.HALF_OPEN:
-        // In half-open state, success means going back to closed
+        // Success in half-open state, reset and close
         breaker.state = CircuitState.CLOSED;
         breaker.failureCount = 0;
-        console.info(`[ErrorHandler] Circuit breaker closed for service: ${service}`);
+        console.log(`[ErrorHandler] Circuit breaker closed for ${service}`);
         break;
+      
+      // No action needed for OPEN state
     }
-    
-    // Update the circuit breaker
-    this.circuitBreakers.set(service, breaker);
   }
   
   /**
@@ -501,38 +554,25 @@ export class ErrorHandler {
    */
   public canMakeRequest(service: string): boolean {
     const breaker = this.circuitBreakers.get(service);
-    if (!breaker) return true;
+    if (!breaker) return true; // No breaker defined, allow request
     
     const now = Date.now();
     
-    switch (breaker.state) {
-      case CircuitState.CLOSED:
-        return true;
-        
-      case CircuitState.OPEN:
-        // Check if it's time to try again
-        if (now > breaker.openUntil) {
-          breaker.state = CircuitState.HALF_OPEN;
-          this.circuitBreakers.set(service, breaker);
-          console.info(`[ErrorHandler] Circuit breaker half-open for service: ${service}`);
-          return true;
-        }
-        return false;
-        
-      case CircuitState.HALF_OPEN:
-        // In half-open state, allow one request to test
-        return true;
-        
-      default:
-        return true;
+    // Check if it's time to transition from OPEN to HALF_OPEN
+    if (breaker.state === CircuitState.OPEN && now > breaker.openUntil) {
+      breaker.state = CircuitState.HALF_OPEN;
+      console.log(`[ErrorHandler] Circuit breaker half-opened for ${service}`);
     }
+    
+    // Allow requests in CLOSED state or HALF_OPEN state
+    return breaker.state === CircuitState.CLOSED || breaker.state === CircuitState.HALF_OPEN;
   }
   
   /**
    * Get recent errors
    */
   public getRecentErrors(): ErrorData[] {
-    return [...this.errorLog];
+    return [...this.errorLog].reverse(); // Most recent first
   }
   
   /**
@@ -548,15 +588,10 @@ export class ErrorHandler {
   public getErrorCountByCategory(): Record<string, number> {
     const counts: Record<string, number> = {};
     
-    // Initialize all categories to 0
-    Object.values(ErrorCategory).forEach(category => {
-      counts[category] = 0;
-    });
-    
-    // Count errors by category
-    this.errorLog.forEach(error => {
-      counts[error.category]++;
-    });
+    for (const error of this.errorLog) {
+      const category = error.category;
+      counts[category] = (counts[category] || 0) + 1;
+    }
     
     return counts;
   }
@@ -567,14 +602,15 @@ export class ErrorHandler {
   public getCircuitBreakerStatus(): Record<string, any> {
     const status: Record<string, any> = {};
     
-    this.circuitBreakers.forEach((breaker, service) => {
+    for (const [service, breaker] of this.circuitBreakers.entries()) {
       status[service] = {
         state: CircuitState[breaker.state],
         failureCount: breaker.failureCount,
-        threshold: breaker.failureThreshold,
-        openUntil: breaker.state === CircuitState.OPEN ? new Date(breaker.openUntil).toISOString() : null
+        failureThreshold: breaker.failureThreshold,
+        lastFailureTime: breaker.lastFailureTime,
+        openUntil: breaker.openUntil
       };
-    });
+    }
     
     return status;
   }
@@ -583,15 +619,13 @@ export class ErrorHandler {
    * Reset circuit breakers (for testing or maintenance)
    */
   public resetCircuitBreakers(): void {
-    this.circuitBreakers.forEach((breaker, service) => {
+    for (const breaker of this.circuitBreakers.values()) {
       breaker.state = CircuitState.CLOSED;
       breaker.failureCount = 0;
+      breaker.lastFailureTime = 0;
       breaker.openUntil = 0;
-      
-      this.circuitBreakers.set(service, breaker);
-    });
-    
-    console.log('[ErrorHandler] Circuit breakers reset');
+    }
+    console.log('[ErrorHandler] All circuit breakers reset');
   }
   
   /**
@@ -613,7 +647,9 @@ export class ErrorHandler {
   ): Error & { category: ErrorCategory; details?: any } {
     const error: Error & { category: ErrorCategory; details?: any } = new Error(message) as any;
     error.category = category;
-    error.details = details;
+    if (details !== undefined) {
+      error.details = details;
+    }
     return error;
   }
 }

@@ -1,105 +1,117 @@
 /**
  * Performance Monitoring System
  * 
- * Provides detailed performance tracking for all AI operations,
- * enabling optimization, bottleneck detection, and system health monitoring.
+ * Provides real-time monitoring and analysis of system performance metrics,
+ * including latency tracking, throughput measurement, error rate monitoring,
+ * and resource utilization tracking.
  */
 
-import { Request, Response, NextFunction } from 'express';
-import { resourceManager } from './resource-manager';
-import os from 'os';
 import fs from 'fs';
 import path from 'path';
+import { Transform } from 'stream';
+import { v4 as uuidv4 } from 'uuid';
+import os from 'os';
 
-// Performance metrics for different operations
-interface OperationMetrics {
-  count: number;
-  totalTime: number;
-  averageTime: number;
-  minTime: number;
-  maxTime: number;
-  lastExecutionTime: number;
-  lastMemoryUsage: number;
-  lastCpuUsage: number;
-  errorCount: number;
-  successRate: number;
+// Performance metric types
+type MetricType = 'counter' | 'gauge' | 'histogram' | 'summary';
+
+// Operation status types 
+type OperationStatus = 'pending' | 'completed' | 'failed';
+
+// Metric data structure
+interface Metric {
+  name: string;
+  type: MetricType;
+  value: number;
+  timestamp: number;
+  tags?: Record<string, string>;
 }
 
-// System health metrics
-interface SystemHealth {
-  cpuUsage: number;
-  memoryUsage: number;
-  freeMemory: number;
-  activeRequests: number;
-  requestsPerMinute: number;
-  errorRate: number;
-  avgResponseTime: number;
-  timestamp: Date;
+// Operation tracking
+interface Operation {
+  id: string;
+  name: string;
+  startTime: number;
+  endTime?: number;
+  status: OperationStatus;
+  duration?: number;
+  parentId?: string;
+  metadata?: Record<string, any>;
 }
 
-// Types of operations we're tracking
-type OperationType = 
-  'llama3' | 
-  'gemma3' | 
-  'hybrid' | 
-  'reasoning' | 
-  'knowledge_retrieve' | 
-  'knowledge_add' | 
-  'conversation' | 
-  'memory' |
-  'api_request';
+// Time window for metrics aggregation
+interface TimeWindow {
+  start: number;
+  end: number;
+  metrics: Metric[];
+  operations: Operation[];
+}
+
+// Percentile calculation
+interface Percentile {
+  p50: number;
+  p90: number;
+  p95: number;
+  p99: number;
+}
 
 /**
- * Performance Monitor class
+ * Performance Monitor Class
  * 
- * Tracks and analyzes system performance metrics
+ * Provides comprehensive performance monitoring capabilities
  */
-export class PerformanceMonitor {
+class PerformanceMonitor {
   private static instance: PerformanceMonitor;
-  private metricsMap: Map<OperationType, OperationMetrics>;
-  private healthHistory: SystemHealth[];
-  private requestsInLastMinute: number[];
-  private lastMinuteTimestamp: number;
-  private logEnabled: boolean;
-  private logPath: string;
+  
+  // Metrics storage
+  private metrics: Metric[] = [];
+  private operations: Map<string, Operation> = new Map();
+  private timeWindows: TimeWindow[] = [];
+  private activeWindows: Map<string, TimeWindow> = new Map();
+  
+  // Configuration
+  private metricsRetentionTime: number = 24 * 60 * 60 * 1000; // 24 hours
+  private windowSize: number = 60 * 1000; // 1 minute
+  private logMetrics: boolean = true;
+  private logOperations: boolean = true;
+  private logFilePath: string;
+  private maxWindows: number = 1440; // 24 hours of 1-minute windows
+  
+  // Runtime stats
   private startTime: number;
+  private lastCleanupTime: number;
+  private cleanupInterval: number = 5 * 60 * 1000; // 5 minutes
+  
+  // Alert thresholds
+  private thresholds: Record<string, number> = {
+    error_rate: 0.05, // 5% error rate
+    latency_p95: 1000, // 1000ms
+    memory_usage: 0.85, // 85% memory usage
+    cpu_usage: 0.9 // 90% CPU usage
+  };
   
   /**
-   * Private constructor - use getInstance()
+   * Private constructor to enforce singleton pattern
    */
   private constructor() {
-    this.metricsMap = new Map<OperationType, OperationMetrics>();
-    this.healthHistory = [];
-    this.requestsInLastMinute = [];
-    this.lastMinuteTimestamp = Date.now();
-    this.logEnabled = process.env.ENABLE_PERFORMANCE_LOGS === 'true';
-    this.logPath = process.env.PERFORMANCE_LOG_PATH || './logs/performance';
     this.startTime = Date.now();
-    
-    // Initialize metrics for all operation types
-    const operationTypes: OperationType[] = [
-      'llama3', 'gemma3', 'hybrid', 'reasoning', 
-      'knowledge_retrieve', 'knowledge_add', 'conversation', 
-      'memory', 'api_request'
-    ];
-    
-    operationTypes.forEach(type => {
-      this.metricsMap.set(type, this.createEmptyMetrics());
-    });
+    this.lastCleanupTime = this.startTime;
+    this.logFilePath = path.join(process.cwd(), 'logs', 'performance.log');
     
     // Ensure log directory exists
-    if (this.logEnabled) {
+    const logDir = path.dirname(this.logFilePath);
+    if (!fs.existsSync(logDir)) {
       try {
-        fs.mkdirSync(this.logPath, { recursive: true });
-        console.log(`[PerformanceMonitor] Log directory created: ${this.logPath}`);
+        fs.mkdirSync(logDir, { recursive: true });
       } catch (error) {
-        console.error(`[PerformanceMonitor] Error creating log directory: ${error}`);
-        this.logEnabled = false;
+        console.error(`[PerformanceMonitor] Failed to create log directory: ${error}`);
+        // Fallback to a directory we know exists
+        this.logFilePath = path.join(os.tmpdir(), 'performance.log');
       }
     }
     
-    // Set up periodic health checks
-    setInterval(() => this.recordSystemHealth(), 60000); // Every minute
+    // Schedule metrics cleanup
+    setInterval(() => this.cleanupStaleMetrics(), this.cleanupInterval);
     
     console.log('[PerformanceMonitor] Initialized');
   }
@@ -115,322 +127,452 @@ export class PerformanceMonitor {
   }
   
   /**
-   * Create empty metrics object with initial values
+   * Record a single metric
    */
-  private createEmptyMetrics(): OperationMetrics {
-    return {
-      count: 0,
-      totalTime: 0,
-      averageTime: 0,
-      minTime: Number.MAX_VALUE,
-      maxTime: 0,
-      lastExecutionTime: 0,
-      lastMemoryUsage: 0,
-      lastCpuUsage: 0,
-      errorCount: 0,
-      successRate: 100
+  public recordMetric(
+    name: string,
+    value: number,
+    type: MetricType = 'gauge',
+    tags?: Record<string, string>
+  ): void {
+    const metric: Metric = {
+      name,
+      type,
+      value,
+      timestamp: Date.now(),
+      tags
     };
+    
+    this.metrics.push(metric);
+    this.addMetricToCurrentWindow(metric);
+    
+    if (this.logMetrics) {
+      this.logMetricToFile(metric);
+    }
   }
   
   /**
-   * Record start of operation for tracking
+   * Increment a counter metric
    */
-  public startOperation(type: OperationType, requestId?: string): string {
-    const id = requestId || `${type}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    
-    // Store start time in a private symbol property of the request object
-    const key = `${id}-start`;
-    (global as any)[key] = {
+  public incrementCounter(name: string, value: number = 1, tags?: Record<string, string>): void {
+    this.recordMetric(name, value, 'counter', tags);
+  }
+  
+  /**
+   * Update a gauge metric
+   */
+  public updateGauge(name: string, value: number, tags?: Record<string, string>): void {
+    this.recordMetric(name, value, 'gauge', tags);
+  }
+  
+  /**
+   * Record a histogram value
+   */
+  public recordHistogram(name: string, value: number, tags?: Record<string, string>): void {
+    this.recordMetric(name, value, 'histogram', tags);
+  }
+  
+  /**
+   * Start tracking an operation
+   */
+  public startOperation(name: string, id: string = uuidv4(), parentId?: string): string {
+    const operation: Operation = {
+      id,
+      name,
       startTime: Date.now(),
-      startMemory: process.memoryUsage().heapUsed,
-      type
+      status: 'pending',
+      parentId
     };
     
-    this.recordRequest();
+    this.operations.set(id, operation);
+    
+    if (this.logOperations) {
+      this.logOperationToFile('start', operation);
+    }
     
     return id;
   }
   
   /**
-   * Record end of operation and update metrics
+   * End tracking an operation
    */
-  public endOperation(id: string, error: boolean = false): void {
-    const key = `${id}-start`;
-    const startData = (global as any)[key];
-    
-    if (!startData) {
-      console.warn(`[PerformanceMonitor] No start data found for operation ${id}`);
+  public endOperation(
+    id: string, 
+    failed: boolean = false, 
+    metadata?: Record<string, any>
+  ): void {
+    const operation = this.operations.get(id);
+    if (!operation) {
+      console.warn(`[PerformanceMonitor] Attempted to end unknown operation: ${id}`);
       return;
     }
     
-    const { startTime, startMemory, type } = startData;
     const endTime = Date.now();
-    const executionTime = endTime - startTime;
-    const memoryUsed = process.memoryUsage().heapUsed - startMemory;
+    operation.endTime = endTime;
+    operation.status = failed ? 'failed' : 'completed';
+    operation.duration = endTime - operation.startTime;
+    
+    if (metadata) {
+      operation.metadata = { ...operation.metadata, ...metadata };
+    }
     
     // Update metrics
-    const metrics = this.metricsMap.get(type) || this.createEmptyMetrics();
+    this.recordMetric(`operation.${operation.name}.duration`, operation.duration, 'histogram');
+    this.recordMetric(`operation.${operation.name}.${operation.status}`, 1, 'counter');
     
-    metrics.count += 1;
-    metrics.totalTime += executionTime;
-    metrics.lastExecutionTime = executionTime;
-    metrics.lastMemoryUsage = memoryUsed;
-    metrics.lastCpuUsage = resourceManager.getSystemResources().cpuUsage;
+    this.addOperationToCurrentWindow(operation);
     
-    if (error) {
-      metrics.errorCount += 1;
+    if (this.logOperations) {
+      this.logOperationToFile('end', operation);
     }
     
-    // Update min/max times
-    if (executionTime < metrics.minTime) {
-      metrics.minTime = executionTime;
-    }
-    if (executionTime > metrics.maxTime) {
-      metrics.maxTime = executionTime;
-    }
-    
-    // Calculate averages
-    metrics.averageTime = metrics.totalTime / metrics.count;
-    metrics.successRate = ((metrics.count - metrics.errorCount) / metrics.count) * 100;
-    
-    // Update the metrics map
-    this.metricsMap.set(type, metrics);
-    
-    // Clean up
-    delete (global as any)[key];
-    
-    // Log if enabled
-    if (this.logEnabled) {
-      this.logOperation(type, id, executionTime, memoryUsed, error);
-    }
-    
-    // Log slow operations
-    if (executionTime > 2000) { // More than 2 seconds
-      console.warn(`[PerformanceMonitor] Slow operation detected: ${type} ${id} took ${executionTime}ms`);
-    }
+    // Check for alerts
+    this.checkOperationAlerts(operation);
   }
   
   /**
-   * Record API request for request rate tracking
+   * Get metrics for a specific time range
    */
-  private recordRequest(): void {
-    const now = Date.now();
-    this.requestsInLastMinute.push(now);
-    
-    // Clean up old requests (older than 1 minute)
-    const oneMinuteAgo = now - 60000;
-    this.requestsInLastMinute = this.requestsInLastMinute.filter(time => time > oneMinuteAgo);
-  }
-  
-  /**
-   * Get current request rate (requests per minute)
-   */
-  public getRequestRate(): number {
-    // Clean up old requests first
-    const now = Date.now();
-    const oneMinuteAgo = now - 60000;
-    this.requestsInLastMinute = this.requestsInLastMinute.filter(time => time > oneMinuteAgo);
-    
-    return this.requestsInLastMinute.length;
-  }
-  
-  /**
-   * Record current system health metrics
-   */
-  private recordSystemHealth(): void {
-    const resources = resourceManager.getSystemResources();
-    const activeRequests = resources.activeRequests;
-    const requestRate = this.getRequestRate();
-    
-    // Calculate average response time and error rate across all operations
-    let totalResponseTime = 0;
-    let totalCount = 0;
-    let totalErrors = 0;
-    
-    this.metricsMap.forEach(metrics => {
-      totalResponseTime += metrics.totalTime;
-      totalCount += metrics.count;
-      totalErrors += metrics.errorCount;
+  public getMetrics(
+    startTime: number, 
+    endTime: number = Date.now(), 
+    metricName?: string,
+    metricType?: MetricType
+  ): Metric[] {
+    return this.metrics.filter(metric => {
+      const timeMatch = metric.timestamp >= startTime && metric.timestamp <= endTime;
+      const nameMatch = !metricName || metric.name === metricName;
+      const typeMatch = !metricType || metric.type === metricType;
+      return timeMatch && nameMatch && typeMatch;
     });
-    
-    const avgResponseTime = totalCount > 0 ? totalResponseTime / totalCount : 0;
-    const errorRate = totalCount > 0 ? (totalErrors / totalCount) * 100 : 0;
-    
-    // Create health snapshot
-    const health: SystemHealth = {
-      cpuUsage: resources.cpuUsage,
-      memoryUsage: (resources.totalMemory - resources.availableMemory) / resources.totalMemory * 100,
-      freeMemory: resources.availableMemory,
-      activeRequests,
-      requestsPerMinute: requestRate,
-      errorRate,
-      avgResponseTime,
-      timestamp: new Date()
-    };
-    
-    // Add to history, keeping last 60 entries (1 hour of data)
-    this.healthHistory.push(health);
-    if (this.healthHistory.length > 60) {
-      this.healthHistory.shift();
-    }
-    
-    // Log if enabled
-    if (this.logEnabled) {
-      this.logSystemHealth(health);
-    }
-    
-    // Detect potential system issues
-    this.detectSystemIssues(health);
   }
   
   /**
-   * Log operation details to file
+   * Get operations for a specific time range
    */
-  private logOperation(
-    type: OperationType, 
-    id: string, 
-    executionTime: number, 
-    memoryUsed: number, 
-    error: boolean
-  ): void {
-    try {
-      const logFile = path.join(this.logPath, `operations-${new Date().toISOString().split('T')[0]}.log`);
-      const logEntry = {
-        timestamp: new Date().toISOString(),
-        type,
-        id,
-        executionTime,
-        memoryUsed,
-        error,
-        profile: resourceManager.getProfile()
-      };
+  public getOperations(
+    startTime: number, 
+    endTime: number = Date.now(), 
+    operationName?: string, 
+    status?: OperationStatus
+  ): Operation[] {
+    const operations: Operation[] = [];
+    
+    for (const op of this.operations.values()) {
+      const timeMatch = op.startTime >= startTime && 
+                       (op.endTime ? op.endTime <= endTime : Date.now() <= endTime);
+      const nameMatch = !operationName || op.name === operationName;
+      const statusMatch = !status || op.status === status;
       
-      fs.appendFileSync(logFile, JSON.stringify(logEntry) + '\n');
-    } catch (error) {
-      console.error(`[PerformanceMonitor] Error logging operation: ${error}`);
-    }
-  }
-  
-  /**
-   * Log system health to file
-   */
-  private logSystemHealth(health: SystemHealth): void {
-    try {
-      const logFile = path.join(this.logPath, `health-${new Date().toISOString().split('T')[0]}.log`);
-      fs.appendFileSync(logFile, JSON.stringify(health) + '\n');
-    } catch (error) {
-      console.error(`[PerformanceMonitor] Error logging system health: ${error}`);
-    }
-  }
-  
-  /**
-   * Detect potential system issues based on health metrics
-   */
-  private detectSystemIssues(health: SystemHealth): void {
-    // CPU usage > 90%
-    if (health.cpuUsage > 90) {
-      console.warn(`[PerformanceMonitor] High CPU usage detected: ${health.cpuUsage.toFixed(2)}%`);
-    }
-    
-    // Memory usage > 90%
-    if (health.memoryUsage > 90) {
-      console.warn(`[PerformanceMonitor] High memory usage detected: ${health.memoryUsage.toFixed(2)}%`);
-    }
-    
-    // Request rate > 1000 per minute
-    if (health.requestsPerMinute > 1000) {
-      console.warn(`[PerformanceMonitor] High request rate detected: ${health.requestsPerMinute} requests/minute`);
-    }
-    
-    // Error rate > 5%
-    if (health.errorRate > 5) {
-      console.warn(`[PerformanceMonitor] High error rate detected: ${health.errorRate.toFixed(2)}%`);
-    }
-    
-    // Average response time > 2000ms
-    if (health.avgResponseTime > 2000) {
-      console.warn(`[PerformanceMonitor] Slow average response time: ${health.avgResponseTime.toFixed(2)}ms`);
-    }
-  }
-  
-  /**
-   * Get metrics for a specific operation type
-   */
-  public getMetrics(type: OperationType): OperationMetrics | undefined {
-    return this.metricsMap.get(type);
-  }
-  
-  /**
-   * Get all operation metrics
-   */
-  public getAllMetrics(): Record<string, OperationMetrics> {
-    const result: Record<string, OperationMetrics> = {};
-    this.metricsMap.forEach((metrics, type) => {
-      result[type] = metrics;
-    });
-    return result;
-  }
-  
-  /**
-   * Get recent system health history
-   */
-  public getHealthHistory(): SystemHealth[] {
-    return [...this.healthHistory];
-  }
-  
-  /**
-   * Get latest system health snapshot
-   */
-  public getLatestHealth(): SystemHealth | undefined {
-    if (this.healthHistory.length === 0) {
-      return undefined;
-    }
-    return this.healthHistory[this.healthHistory.length - 1];
-  }
-  
-  /**
-   * Get system uptime in seconds
-   */
-  public getUptime(): number {
-    return Math.floor((Date.now() - this.startTime) / 1000);
-  }
-  
-  /**
-   * Reset all metrics (for testing or maintenance)
-   */
-  public resetMetrics(): void {
-    this.metricsMap.forEach((_, type) => {
-      this.metricsMap.set(type, this.createEmptyMetrics());
-    });
-    this.healthHistory = [];
-    this.requestsInLastMinute = [];
-    this.lastMinuteTimestamp = Date.now();
-    console.log('[PerformanceMonitor] Metrics reset');
-  }
-  
-  /**
-   * Express middleware for automatically tracking API requests
-   */
-  public trackApiRequest() {
-    return (req: Request, res: Response, next: NextFunction) => {
-      // Skip tracking for static assets
-      if (req.path.includes('.') || req.path.startsWith('/static')) {
-        return next();
+      if (timeMatch && nameMatch && statusMatch) {
+        operations.push(op);
       }
-      
-      const requestId = this.startOperation('api_request');
-      
-      // Track response time
-      const end = res.end;
-      res.end = (...args: any[]) => {
-        const error = res.statusCode >= 400;
-        this.endOperation(requestId, error);
-        
-        return end.apply(res, args);
+    }
+    
+    return operations;
+  }
+  
+  /**
+   * Calculate percentiles for a metric
+   */
+  public calculatePercentiles(
+    metricName: string, 
+    startTime: number, 
+    endTime: number = Date.now()
+  ): Percentile {
+    const values = this.getMetrics(startTime, endTime, metricName)
+      .map(m => m.value)
+      .sort((a, b) => a - b);
+    
+    if (values.length === 0) {
+      return { p50: 0, p90: 0, p95: 0, p99: 0 };
+    }
+    
+    return {
+      p50: this.getPercentile(values, 50),
+      p90: this.getPercentile(values, 90),
+      p95: this.getPercentile(values, 95),
+      p99: this.getPercentile(values, 99)
+    };
+  }
+  
+  /**
+   * Get error rate for an operation
+   */
+  public getErrorRate(
+    operationName: string,
+    startTime: number,
+    endTime: number = Date.now()
+  ): number {
+    const operations = this.getOperations(startTime, endTime, operationName);
+    
+    if (operations.length === 0) {
+      return 0;
+    }
+    
+    const failedCount = operations.filter(op => op.status === 'failed').length;
+    return failedCount / operations.length;
+  }
+  
+  /**
+   * Get summary statistics
+   */
+  public getSummaryStats(): Record<string, any> {
+    const now = Date.now();
+    const oneHourAgo = now - (60 * 60 * 1000);
+    
+    // Calculate error rates for the last hour
+    const errorRates: Record<string, number> = {};
+    const operationNames = new Set<string>();
+    
+    for (const op of this.operations.values()) {
+      if (op.startTime >= oneHourAgo) {
+        operationNames.add(op.name);
+      }
+    }
+    
+    for (const name of operationNames) {
+      errorRates[name] = this.getErrorRate(name, oneHourAgo);
+    }
+    
+    // Get overall error rate
+    const totalOps = this.getOperations(oneHourAgo).length;
+    const failedOps = this.getOperations(oneHourAgo, now, undefined, 'failed').length;
+    const overallErrorRate = totalOps > 0 ? failedOps / totalOps : 0;
+    
+    // Check if any error rates exceed thresholds
+    if (overallErrorRate > this.thresholds.error_rate) {
+      console.warn(`[PerformanceMonitor] High error rate detected: ${(overallErrorRate * 100).toFixed(2)}%`);
+    }
+    
+    // Calculate system metrics
+    const memUsage = process.memoryUsage();
+    const memoryMetrics = {
+      rss: memUsage.rss / (1024 * 1024),
+      heapTotal: memUsage.heapTotal / (1024 * 1024),
+      heapUsed: memUsage.heapUsed / (1024 * 1024),
+      external: memUsage.external / (1024 * 1024)
+    };
+    
+    return {
+      uptime: (now - this.startTime) / 1000,
+      totalMetricsCount: this.metrics.length,
+      totalOperationsCount: this.operations.size,
+      activeOperationsCount: Array.from(this.operations.values())
+        .filter(op => !op.endTime).length,
+      errorRates,
+      overallErrorRate,
+      memory: memoryMetrics,
+      timeWindowsCount: this.timeWindows.length
+    };
+  }
+  
+  /**
+   * Create a metrics stream transformer
+   */
+  public createMetricsTransform(): Transform {
+    return new Transform({
+      objectMode: true,
+      transform: (chunk, encoding, callback) => {
+        try {
+          // Add metrics from the incoming chunk
+          if (chunk && typeof chunk === 'object') {
+            if (Array.isArray(chunk)) {
+              for (const item of chunk) {
+                if (item && typeof item === 'object' && 'name' in item && 'value' in item) {
+                  this.recordMetric(
+                    item.name as string,
+                    item.value as number,
+                    (item.type as MetricType) || 'gauge',
+                    item.tags as Record<string, string>
+                  );
+                }
+              }
+            } else if ('name' in chunk && 'value' in chunk) {
+              this.recordMetric(
+                chunk.name as string,
+                chunk.value as number,
+                (chunk.type as MetricType) || 'gauge',
+                chunk.tags as Record<string, string>
+              );
+            }
+          }
+          callback(null, chunk);
+        } catch (error) {
+          callback(error);
+        }
+      }
+    });
+  }
+  
+  /**
+   * Add a metric to the current time window
+   */
+  private addMetricToCurrentWindow(metric: Metric): void {
+    const windowKey = this.getWindowKey(metric.timestamp);
+    let window = this.activeWindows.get(windowKey);
+    
+    if (!window) {
+      const windowStart = Math.floor(metric.timestamp / this.windowSize) * this.windowSize;
+      window = {
+        start: windowStart,
+        end: windowStart + this.windowSize,
+        metrics: [],
+        operations: []
       };
       
-      next();
-    };
+      this.activeWindows.set(windowKey, window);
+      this.timeWindows.push(window);
+      
+      // Limit the number of windows we keep
+      if (this.timeWindows.length > this.maxWindows) {
+        this.timeWindows.shift();
+      }
+    }
+    
+    window.metrics.push(metric);
+  }
+  
+  /**
+   * Add an operation to the current time window
+   */
+  private addOperationToCurrentWindow(operation: Operation): void {
+    if (!operation.endTime) return;
+    
+    const windowKey = this.getWindowKey(operation.endTime);
+    let window = this.activeWindows.get(windowKey);
+    
+    if (!window) {
+      const windowStart = Math.floor(operation.endTime / this.windowSize) * this.windowSize;
+      window = {
+        start: windowStart,
+        end: windowStart + this.windowSize,
+        metrics: [],
+        operations: []
+      };
+      
+      this.activeWindows.set(windowKey, window);
+      this.timeWindows.push(window);
+      
+      // Limit the number of windows we keep
+      if (this.timeWindows.length > this.maxWindows) {
+        this.timeWindows.shift();
+      }
+    }
+    
+    window.operations.push(operation);
+  }
+  
+  /**
+   * Get window key from timestamp
+   */
+  private getWindowKey(timestamp: number): string {
+    return Math.floor(timestamp / this.windowSize).toString();
+  }
+  
+  /**
+   * Calculate a percentile value
+   */
+  private getPercentile(sortedValues: number[], percentile: number): number {
+    if (sortedValues.length === 0) return 0;
+    if (sortedValues.length === 1) return sortedValues[0];
+    
+    const index = (percentile / 100) * (sortedValues.length - 1);
+    const lower = Math.floor(index);
+    const upper = Math.ceil(index);
+    
+    if (lower === upper) return sortedValues[lower];
+    
+    const weight = index - lower;
+    return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
+  }
+  
+  /**
+   * Clean up stale metrics
+   */
+  private cleanupStaleMetrics(): void {
+    const now = Date.now();
+    const cutoffTime = now - this.metricsRetentionTime;
+    
+    // Clean up old metrics
+    this.metrics = this.metrics.filter(m => m.timestamp >= cutoffTime);
+    
+    // Clean up old operations
+    for (const [id, op] of this.operations.entries()) {
+      if (op.endTime && op.endTime < cutoffTime) {
+        this.operations.delete(id);
+      }
+    }
+    
+    // Clean up old time windows
+    this.timeWindows = this.timeWindows.filter(w => w.end >= cutoffTime);
+    
+    // Reset active windows map
+    this.activeWindows.clear();
+    for (const window of this.timeWindows) {
+      const key = this.getWindowKey(window.start);
+      this.activeWindows.set(key, window);
+    }
+    
+    this.lastCleanupTime = now;
+  }
+  
+  /**
+   * Log metric to file
+   */
+  private logMetricToFile(metric: Metric): void {
+    try {
+      const logLine = JSON.stringify({
+        type: 'metric',
+        timestamp: new Date(metric.timestamp).toISOString(),
+        ...metric
+      });
+      
+      fs.appendFileSync(this.logFilePath, logLine + '\n');
+    } catch (error) {
+      console.error(`[PerformanceMonitor] Failed to log metric: ${error}`);
+    }
+  }
+  
+  /**
+   * Log operation to file
+   */
+  private logOperationToFile(event: 'start' | 'end', operation: Operation): void {
+    try {
+      const logLine = JSON.stringify({
+        type: 'operation',
+        event,
+        timestamp: new Date(event === 'start' ? operation.startTime : (operation.endTime || Date.now())).toISOString(),
+        ...operation
+      });
+      
+      fs.appendFileSync(this.logFilePath, logLine + '\n');
+    } catch (error) {
+      console.error(`[PerformanceMonitor] Failed to log operation: ${error}`);
+    }
+  }
+  
+  /**
+   * Check for operation alerts
+   */
+  private checkOperationAlerts(operation: Operation): void {
+    if (!operation.duration) return;
+    
+    // Check for slow operations
+    if (operation.duration > 10000) { // 10 seconds
+      console.warn(`[PerformanceMonitor] Slow operation detected: ${operation.name} took ${operation.duration}ms`);
+    }
+    
+    // Check for failed operations
+    if (operation.status === 'failed') {
+      // Calculate recent error rate for this operation type
+      const oneMinuteAgo = Date.now() - (60 * 1000);
+      const errorRate = this.getErrorRate(operation.name, oneMinuteAgo);
+      
+      if (errorRate > this.thresholds.error_rate) {
+        console.warn(`[PerformanceMonitor] High error rate for ${operation.name}: ${(errorRate * 100).toFixed(2)}%`);
+      }
+    }
   }
 }
 

@@ -1,99 +1,152 @@
 /**
- * Resource Management System
+ * Adaptive Resource Management System
  * 
- * Enables the AI system to adapt to different server environments
- * from 16GB RAM servers to high-end infrastructure by dynamically
- * adjusting parameters based on available resources.
+ * Provides dynamic allocation and optimization of system resources
+ * based on workload, available hardware, and request priority.
+ * Implements adaptive throttling and graceful degradation under load.
  */
 
 import os from 'os';
 
-// Resource profile types
-export type ResourceProfile = 'minimal' | 'standard' | 'enhanced' | 'unlimited';
+// Resource types that can be managed
+type ResourceType = 'memory' | 'cpu' | 'gpu' | 'tokens' | 'requests';
 
-// System resource limits based on profile
-export interface ResourceLimits {
-  maxContextSize: number;
-  maxTokens: number;
-  maxConcurrentRequests: number;
-  maxProcessingTime: number;
-  enableParallelInference: boolean;
-  useQuantization: boolean;
+// Operation types that require resource allocation
+type OperationType = 
+  | 'llama3_inference' 
+  | 'gemma3_inference'
+  | 'hybrid_inference'
+  | 'reasoning_operation'
+  | 'knowledge_retrieval'
+  | 'database_operation';
+
+// Priority levels for resource allocation
+type PriorityLevel = 'low' | 'normal' | 'high' | 'critical';
+
+// Resource profiles for different hardware environments
+type ResourceProfile = 'minimal' | 'standard' | 'enhanced' | 'dedicated';
+
+// Resource allocation options
+interface AllocationOptions {
+  estimated_tokens?: number;
+  expected_duration_ms?: number;
+  priority?: PriorityLevel;
+  timeout_ms?: number;
+  metadata?: Record<string, any>;
 }
 
-// Current system resource usage
-export interface SystemResources {
-  totalMemory: number;
-  availableMemory: number;
-  cpuCount: number;
-  cpuUsage: number;
-  activeRequests: number;
+// Resource status for monitoring
+interface ResourceStatus {
+  total: number;
+  used: number;
+  available: number;
+  reserved: number;
+  utilization: number;
+}
+
+// Active allocation tracking
+interface ActiveAllocation {
+  operationType: OperationType;
+  startTime: number;
+  resources: Record<ResourceType, number>;
+  priority: PriorityLevel;
+  metadata?: Record<string, any>;
 }
 
 /**
- * ResourceManager class
+ * Resource Manager Class
  * 
- * Handles dynamic resource allocation and adaptation
- * based on the server environment.
+ * Handles dynamic allocation and optimization of system resources
  */
-export class ResourceManager {
+class ResourceManager {
   private static instance: ResourceManager;
-  private activeRequests: number = 0;
-  private lastCpuUsage: { user: number; system: number; idle: number } = { user: 0, system: 0, idle: 0 };
-  private cpuUsagePercentage: number = 0;
-  private profile: ResourceProfile;
   
-  // Resource limit profiles
-  private readonly resourceProfiles: Record<ResourceProfile, ResourceLimits> = {
-    minimal: {
-      maxContextSize: 4096,
-      maxTokens: 1024,
-      maxConcurrentRequests: 2,
-      maxProcessingTime: 10000, // 10 seconds
-      enableParallelInference: false,
-      useQuantization: true
+  // System resources
+  private totalMemory: number; // In MB
+  private availableMemory: number; // In MB
+  private cpuCores: number;
+  private gpuAvailable: boolean;
+  
+  // Active allocations and thresholds
+  private activeAllocations: Map<string, ActiveAllocation> = new Map();
+  private resourceProfile: ResourceProfile;
+  private utilizationThresholds: Record<ResourceType, number>;
+  private priorityWeights: Record<PriorityLevel, number>;
+  
+  // Operation-specific resource requirements
+  private operationRequirements: Record<OperationType, Record<ResourceType, number>> = {
+    llama3_inference: {
+      memory: 1024, // Base memory requirement in MB
+      cpu: 2,       // CPU cores
+      gpu: 0,       // GPU memory in MB (if available)
+      tokens: 1,    // Token multiplier
+      requests: 1   // Concurrent request count
     },
-    standard: {
-      maxContextSize: 8192,
-      maxTokens: 2048,
-      maxConcurrentRequests: 5,
-      maxProcessingTime: 15000, // 15 seconds
-      enableParallelInference: true,
-      useQuantization: true
+    gemma3_inference: {
+      memory: 1024,
+      cpu: 2,
+      gpu: 0,
+      tokens: 1,
+      requests: 1
     },
-    enhanced: {
-      maxContextSize: 16384,
-      maxTokens: 4096,
-      maxConcurrentRequests: 10,
-      maxProcessingTime: 20000, // 20 seconds
-      enableParallelInference: true,
-      useQuantization: false
+    hybrid_inference: {
+      memory: 2048,
+      cpu: 4,
+      gpu: 0,
+      tokens: 2,
+      requests: 1
     },
-    unlimited: {
-      maxContextSize: 32768,
-      maxTokens: 8192,
-      maxConcurrentRequests: 30,
-      maxProcessingTime: 30000, // 30 seconds
-      enableParallelInference: true,
-      useQuantization: false
+    reasoning_operation: {
+      memory: 512,
+      cpu: 1,
+      gpu: 0,
+      tokens: 0.5,
+      requests: 1
+    },
+    knowledge_retrieval: {
+      memory: 256,
+      cpu: 1,
+      gpu: 0,
+      tokens: 0.2,
+      requests: 1
+    },
+    database_operation: {
+      memory: 128,
+      cpu: 0.5,
+      gpu: 0,
+      tokens: 0.1,
+      requests: 1
     }
   };
   
   /**
-   * Private constructor - use getInstance()
+   * Private constructor to enforce singleton pattern
    */
   private constructor() {
-    // Determine the appropriate resource profile based on system capabilities
-    this.profile = this.determineResourceProfile();
+    // Get system information
+    this.totalMemory = Math.floor(os.totalmem() / (1024 * 1024)); // Convert to MB
+    this.availableMemory = Math.floor(os.freemem() / (1024 * 1024)); // Convert to MB
+    this.cpuCores = os.cpus().length;
     
-    // Initialize CPU usage tracking
-    this.updateCpuUsage();
+    // Detect if GPU is present (simplified simulation)
+    this.gpuAvailable = false; // In a real system, use proper GPU detection
     
-    // Set up CPU usage monitoring interval
-    setInterval(() => this.updateCpuUsage(), 5000);
+    // Set resource profile based on available hardware
+    this.resourceProfile = this.determineResourceProfile();
     
-    console.log(`[ResourceManager] Initialized with ${this.profile} profile`);
-    console.log(`[ResourceManager] System has ${Math.round(os.totalmem() / (1024 * 1024 * 1024))}GB RAM and ${os.cpus().length} CPU cores`);
+    // Configure thresholds based on profile
+    this.utilizationThresholds = this.configureThresholds();
+    
+    // Configure priority weights
+    this.priorityWeights = {
+      low: 0.5,
+      normal: 1.0,
+      high: 2.0,
+      critical: 4.0
+    };
+    
+    console.log(`[ResourceManager] Initialized with ${this.resourceProfile} profile`);
+    console.log(`[ResourceManager] System has ${Math.round(this.totalMemory / 1024)}GB RAM and ${this.cpuCores} CPU cores`);
   }
   
   /**
@@ -107,241 +160,313 @@ export class ResourceManager {
   }
   
   /**
-   * Determine the appropriate resource profile based on system capabilities
+   * Determine the resource profile based on hardware
    */
   private determineResourceProfile(): ResourceProfile {
-    const totalMemoryGB = os.totalmem() / (1024 * 1024 * 1024);
-    const cpuCount = os.cpus().length;
-    
-    // Determine profile based on available RAM and CPU
-    if (totalMemoryGB >= 64) {
-      return cpuCount >= 8 ? 'unlimited' : 'enhanced';
-    } else if (totalMemoryGB >= 32) {
-      return 'enhanced';
-    } else if (totalMemoryGB >= 16) {
-      return 'standard';
-    } else {
+    // Determine profile based on available hardware
+    if (this.totalMemory < 4 * 1024) { // Less than 4GB RAM
       return 'minimal';
+    } else if (this.totalMemory < 16 * 1024) { // Less than 16GB RAM
+      return 'standard';
+    } else if (this.totalMemory < 64 * 1024) { // Less than 64GB RAM
+      return 'enhanced';
+    } else {
+      return 'dedicated';
     }
   }
   
   /**
-   * Update CPU usage statistics
+   * Configure utilization thresholds based on profile
    */
-  private updateCpuUsage(): void {
-    const cpuInfo = os.cpus();
+  private configureThresholds(): Record<ResourceType, number> {
+    // Default thresholds
+    const defaults = {
+      memory: 0.85, // 85% memory utilization
+      cpu: 0.9,     // 90% CPU utilization
+      gpu: 0.95,    // 95% GPU utilization
+      tokens: 0.8,  // 80% token rate limit
+      requests: 0.9 // 90% request rate limit
+    };
     
-    // Calculate CPU times
-    let user = 0, system = 0, idle = 0;
-    
-    for (const cpu of cpuInfo) {
-      user += cpu.times.user;
-      system += cpu.times.sys;
-      idle += cpu.times.idle;
+    // Adjust based on profile
+    switch (this.resourceProfile) {
+      case 'minimal':
+        return {
+          memory: 0.7,
+          cpu: 0.8,
+          gpu: 0.9,
+          tokens: 0.6,
+          requests: 0.7
+        };
+      case 'standard':
+        return defaults;
+      case 'enhanced':
+        return {
+          memory: 0.9,
+          cpu: 0.95,
+          gpu: 0.98,
+          tokens: 0.85,
+          requests: 0.95
+        };
+      case 'dedicated':
+        return {
+          memory: 0.95,
+          cpu: 0.98,
+          gpu: 0.99,
+          tokens: 0.9,
+          requests: 0.98
+        };
     }
+  }
+  
+  /**
+   * Check if sufficient resources are available for an operation
+   */
+  public checkAvailableResources(operationType: OperationType, options?: AllocationOptions): boolean {
+    const requirements = this.calculateResourceRequirements(operationType, options);
+    const currentUtilization = this.getCurrentUtilization();
     
-    // Calculate CPU usage percentage based on delta since last check
-    if (this.lastCpuUsage.user > 0) {
-      const userDelta = user - this.lastCpuUsage.user;
-      const systemDelta = system - this.lastCpuUsage.system;
-      const idleDelta = idle - this.lastCpuUsage.idle;
-      const totalDelta = userDelta + systemDelta + idleDelta;
+    // Check each resource type
+    for (const [resource, required] of Object.entries(requirements) as [ResourceType, number][]) {
+      const available = this.getAvailableResource(resource);
+      if (required > available) {
+        console.log(`[ResourceManager] Insufficient ${resource} for ${operationType}: requires ${required}, available ${available}`);
+        return false;
+      }
       
-      this.cpuUsagePercentage = totalDelta > 0 ? 
-        ((userDelta + systemDelta) / totalDelta) * 100 : 0;
+      // Check if allocation would exceed threshold
+      const currentUsed = this.getUsedResource(resource);
+      const potentialUtilization = (currentUsed + required) / this.getTotalResource(resource);
+      if (potentialUtilization > this.utilizationThresholds[resource]) {
+        console.log(`[ResourceManager] ${resource} threshold would be exceeded for ${operationType}: ${potentialUtilization.toFixed(2)} > ${this.utilizationThresholds[resource]}`);
+        return false;
+      }
     }
     
-    // Update last CPU usage
-    this.lastCpuUsage = { user, system, idle };
+    return true;
   }
   
   /**
-   * Get the current resource profile
+   * Allocate resources for an operation
    */
-  public getProfile(): ResourceProfile {
-    return this.profile;
+  public allocateResources(operationType: OperationType, options?: AllocationOptions): string {
+    const allocationId = `${operationType}-${Date.now()}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+    const requirements = this.calculateResourceRequirements(operationType, options);
+    const priority = options?.priority || 'normal';
+    
+    // Create allocation record
+    this.activeAllocations.set(allocationId, {
+      operationType,
+      startTime: Date.now(),
+      resources: requirements,
+      priority,
+      metadata: options?.metadata
+    });
+    
+    // Set timeout to auto-release if specified
+    if (options?.timeout_ms) {
+      setTimeout(() => {
+        if (this.activeAllocations.has(allocationId)) {
+          console.log(`[ResourceManager] Auto-releasing timed out allocation: ${allocationId}`);
+          this.releaseResources(allocationId);
+        }
+      }, options.timeout_ms);
+    }
+    
+    return allocationId;
   }
   
   /**
-   * Get the current resource limits
+   * Release resources for an operation
    */
-  public getLimits(): ResourceLimits {
-    return this.resourceProfiles[this.profile];
+  public releaseResources(allocationIdOrType: string): boolean {
+    // Check if it's an allocation ID
+    if (this.activeAllocations.has(allocationIdOrType)) {
+      this.activeAllocations.delete(allocationIdOrType);
+      return true;
+    }
+    
+    // Check if it's an operation type and release all of that type
+    let found = false;
+    for (const [id, allocation] of this.activeAllocations.entries()) {
+      if (allocation.operationType === allocationIdOrType) {
+        this.activeAllocations.delete(id);
+        found = true;
+      }
+    }
+    
+    return found;
   }
   
   /**
-   * Get current system resource usage
+   * Calculate resource requirements for an operation
    */
-  public getSystemResources(): SystemResources {
+  private calculateResourceRequirements(
+    operationType: OperationType, 
+    options?: AllocationOptions
+  ): Record<ResourceType, number> {
+    const baseRequirements = this.operationRequirements[operationType];
+    const result: Record<ResourceType, number> = { ...baseRequirements };
+    
+    // Scale memory based on estimated tokens
+    if (options?.estimated_tokens) {
+      // Assumption: 1KB of memory per token as a rough estimate
+      const tokenMemory = options.estimated_tokens * 1; // 1KB per token
+      result.memory += Math.ceil(tokenMemory / 1024); // Convert to MB
+    }
+    
+    // Scale based on priority
+    if (options?.priority) {
+      const priorityMultiplier = this.priorityWeights[options.priority];
+      // Priority affects CPU allocation more than memory
+      result.cpu *= priorityMultiplier;
+    }
+    
+    // If in minimal profile, reduce all resource requirements
+    if (this.resourceProfile === 'minimal') {
+      result.memory = Math.ceil(result.memory * 0.7);
+      result.cpu = Math.ceil(result.cpu * 0.7);
+    }
+    
+    return result;
+  }
+  
+  /**
+   * Get current utilization of resources
+   */
+  public getCurrentUtilization(): Record<ResourceType, number> {
     return {
-      totalMemory: os.totalmem(),
-      availableMemory: os.freemem(),
-      cpuCount: os.cpus().length,
-      cpuUsage: this.cpuUsagePercentage,
-      activeRequests: this.activeRequests
+      memory: this.getUsedResource('memory') / this.getTotalResource('memory'),
+      cpu: this.getUsedResource('cpu') / this.getTotalResource('cpu'),
+      gpu: this.getUsedResource('gpu') / this.getTotalResource('gpu'),
+      tokens: this.getUsedResource('tokens') / this.getTotalResource('tokens'),
+      requests: this.getUsedResource('requests') / this.getTotalResource('requests')
     };
   }
   
   /**
-   * Register the start of a new request
+   * Get total amount of a resource
    */
-  public startRequest(): void {
-    this.activeRequests++;
-    
-    // Dynamically downgrade profile if system is under heavy load
-    this.checkForProfileDowngrade();
-    
-    // Log system load
-    if (this.activeRequests % 5 === 0) {
-      const resources = this.getSystemResources();
-      console.log(`[ResourceManager] System load: ${this.activeRequests} active requests, ${Math.round(this.cpuUsagePercentage)}% CPU usage, ${Math.round(resources.availableMemory / (1024 * 1024 * 1024))}GB free memory`);
+  private getTotalResource(resource: ResourceType): number {
+    switch (resource) {
+      case 'memory':
+        return this.totalMemory;
+      case 'cpu':
+        return this.cpuCores;
+      case 'gpu':
+        return this.gpuAvailable ? 1024 : 0; // Simplified value
+      case 'tokens':
+        // Token rate limit depends on profile
+        switch (this.resourceProfile) {
+          case 'minimal': return 10000;
+          case 'standard': return 50000;
+          case 'enhanced': return 200000;
+          case 'dedicated': return 1000000;
+        }
+      case 'requests':
+        // Request concurrency depends on profile
+        switch (this.resourceProfile) {
+          case 'minimal': return 10;
+          case 'standard': return 50;
+          case 'enhanced': return 200;
+          case 'dedicated': return 500;
+        }
     }
   }
   
   /**
-   * Register the end of a request
+   * Get used amount of a resource
    */
-  public endRequest(): void {
-    this.activeRequests = Math.max(0, this.activeRequests - 1);
+  private getUsedResource(resource: ResourceType): number {
+    // Sum all active allocations
+    let used = 0;
+    for (const allocation of this.activeAllocations.values()) {
+      used += allocation.resources[resource] || 0;
+    }
     
-    // Check if we can upgrade profile again
-    this.checkForProfileUpgrade();
-  }
-  
-  /**
-   * Check if the system can process a new request
-   */
-  public canProcessRequest(): boolean {
-    const limits = this.getLimits();
-    return this.activeRequests < limits.maxConcurrentRequests;
-  }
-  
-  /**
-   * Get the maximum context size for the current profile
-   */
-  public getMaxContextSize(): number {
-    return this.getLimits().maxContextSize;
-  }
-  
-  /**
-   * Get the maximum tokens for the current profile
-   */
-  public getMaxTokens(): number {
-    return this.getLimits().maxTokens;
-  }
-  
-  /**
-   * Get whether parallel inference is enabled for the current profile
-   */
-  public isParallelInferenceEnabled(): boolean {
-    return this.getLimits().enableParallelInference;
-  }
-  
-  /**
-   * Get whether model quantization is enabled for the current profile
-   */
-  public isQuantizationEnabled(): boolean {
-    return this.getLimits().useQuantization;
-  }
-  
-  /**
-   * Check if we need to downgrade the profile due to resource constraints
-   */
-  private checkForProfileDowngrade(): void {
-    const resources = this.getSystemResources();
-    const freeMemoryGB = resources.availableMemory / (1024 * 1024 * 1024);
+    // For memory, also factor in system usage
+    if (resource === 'memory') {
+      const systemUsed = this.totalMemory - this.availableMemory;
+      used = Math.max(used, systemUsed); // Take the larger value
+    }
     
-    // Check if we need to downgrade based on memory pressure
-    if (this.profile === 'unlimited' && (freeMemoryGB < 16 || this.cpuUsagePercentage > 85)) {
-      this.profile = 'enhanced';
-      console.log('[ResourceManager] Downgraded to enhanced profile due to resource constraints');
-    } else if (this.profile === 'enhanced' && (freeMemoryGB < 8 || this.cpuUsagePercentage > 90)) {
-      this.profile = 'standard';
-      console.log('[ResourceManager] Downgraded to standard profile due to resource constraints');
-    } else if (this.profile === 'standard' && (freeMemoryGB < 4 || this.cpuUsagePercentage > 95)) {
-      this.profile = 'minimal';
-      console.log('[ResourceManager] Downgraded to minimal profile due to resource constraints');
+    return used;
+  }
+  
+  /**
+   * Get available amount of a resource
+   */
+  private getAvailableResource(resource: ResourceType): number {
+    const total = this.getTotalResource(resource);
+    const used = this.getUsedResource(resource);
+    return Math.max(0, total - used);
+  }
+  
+  /**
+   * Get resource status for monitoring
+   */
+  public getResourceStatus(): Record<ResourceType, ResourceStatus> {
+    const result: Record<ResourceType, ResourceStatus> = {} as any;
+    
+    for (const resource of ['memory', 'cpu', 'gpu', 'tokens', 'requests'] as ResourceType[]) {
+      const total = this.getTotalResource(resource);
+      const used = this.getUsedResource(resource);
+      const available = this.getAvailableResource(resource);
+      
+      // Calculate reserved (allocated but not necessarily used)
+      let reserved = 0;
+      for (const allocation of this.activeAllocations.values()) {
+        reserved += allocation.resources[resource] || 0;
+      }
+      
+      result[resource] = {
+        total,
+        used,
+        available,
+        reserved,
+        utilization: total > 0 ? used / total : 0
+      };
+    }
+    
+    return result;
+  }
+  
+  /**
+   * Optimize resource allocation based on load
+   */
+  public optimizeResourceAllocation(): void {
+    const currentUtilization = this.getCurrentUtilization();
+    
+    // Check if we're approaching resource limits
+    const approachingLimit = Object.entries(currentUtilization).some(
+      ([resource, utilization]) => utilization > this.utilizationThresholds[resource as ResourceType] * 0.9
+    );
+    
+    if (approachingLimit) {
+      console.log('[ResourceManager] Approaching resource limits, optimizing allocations...');
+      
+      // Implement priority-based scaling - reduce resources for low-priority tasks
+      for (const [id, allocation] of this.activeAllocations.entries()) {
+        if (allocation.priority === 'low') {
+          // Reduce CPU allocation for low-priority tasks
+          allocation.resources.cpu = Math.max(0.5, allocation.resources.cpu * 0.8);
+        }
+      }
     }
   }
   
   /**
-   * Check if we can upgrade the profile due to available resources
+   * Get active allocations count by operation type
    */
-  private checkForProfileUpgrade(): void {
-    // Only check for upgrade if active requests are low
-    if (this.activeRequests > 2) return;
+  public getActiveAllocationsByType(): Record<OperationType, number> {
+    const result: Partial<Record<OperationType, number>> = {};
     
-    const resources = this.getSystemResources();
-    const freeMemoryGB = resources.availableMemory / (1024 * 1024 * 1024);
-    const totalMemoryGB = resources.totalMemory / (1024 * 1024 * 1024);
+    for (const allocation of this.activeAllocations.values()) {
+      const type = allocation.operationType;
+      result[type] = (result[type] || 0) + 1;
+    }
     
-    // Check if we can upgrade based on memory availability
-    if (this.profile === 'minimal' && freeMemoryGB > 8 && this.cpuUsagePercentage < 70) {
-      this.profile = 'standard';
-      console.log('[ResourceManager] Upgraded to standard profile due to available resources');
-    } else if (this.profile === 'standard' && freeMemoryGB > 16 && this.cpuUsagePercentage < 60) {
-      this.profile = 'enhanced';
-      console.log('[ResourceManager] Upgraded to enhanced profile due to available resources');
-    } else if (this.profile === 'enhanced' && freeMemoryGB > 32 && totalMemoryGB >= 64 && this.cpuUsagePercentage < 50) {
-      this.profile = 'unlimited';
-      console.log('[ResourceManager] Upgraded to unlimited profile due to available resources');
-    }
-  }
-  
-  /**
-   * Calculate appropriate temperature based on profile and request importance
-   */
-  public calculateTemperature(baseTemperature: number, requestImportance: number): number {
-    const profile = this.getProfile();
-    
-    // Adjust temperature based on profile and request importance
-    // Higher importance requests get closer to the requested temperature
-    switch (profile) {
-      case 'minimal':
-        // Minimal profile uses lower temperatures for stability
-        return 0.5 + (baseTemperature - 0.5) * 0.5 * requestImportance;
-      case 'standard':
-        // Standard profile slightly reduces temperature
-        return 0.5 + (baseTemperature - 0.5) * 0.7 * requestImportance;
-      case 'enhanced':
-        // Enhanced profile uses closer to requested temperature
-        return 0.5 + (baseTemperature - 0.5) * 0.9 * requestImportance;
-      case 'unlimited':
-        // Unlimited uses exactly requested temperature
-        return baseTemperature;
-      default:
-        return baseTemperature;
-    }
-  }
-  
-  /**
-   * Estimate token count for a given input
-   * This is a simple approximation
-   */
-  public estimateTokenCount(text: string): number {
-    // Simple approximation: ~4 characters per token for English text
-    return Math.ceil(text.length / 4);
-  }
-  
-  /**
-   * Get appropriate batch size for parallel operations
-   */
-  public getBatchSize(): number {
-    switch (this.profile) {
-      case 'minimal': return 1; // No batching
-      case 'standard': return 2;
-      case 'enhanced': return 4;
-      case 'unlimited': return 8;
-      default: return 2;
-    }
-  }
-  
-  /**
-   * Reset the resource manager (for testing)
-   */
-  public reset(): void {
-    this.activeRequests = 0;
-    this.profile = this.determineResourceProfile();
+    return result as Record<OperationType, number>;
   }
 }
 

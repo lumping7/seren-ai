@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { storage } from '../storage';
+import { performanceMonitor } from './performance-monitor';
+import { errorHandler, ErrorCategory } from './error-handler';
+import { resourceManager } from './resource-manager';
 
 // Define validation schema for Llama3 input
 const llama3InputSchema = z.object({
@@ -62,13 +65,35 @@ export async function llamaHandler(req: Request, res: Response) {
   const requestId = generateRequestId();
   const startTime = Date.now();
   
+  // Start performance tracking
+  performanceMonitor.startOperation('llama3_inference', requestId);
+  
   try {
+    // Check if we have sufficient resources to handle this request
+    if (!resourceManager.checkAvailableResources('llama3_inference')) {
+      performanceMonitor.endOperation(requestId, true);
+      return res.status(503).json({
+        error: 'Service temporarily unavailable',
+        message: 'System is currently at capacity. Please try again later.',
+        request_id: requestId,
+        retry_after: 10 // Suggest retry after 10 seconds
+      });
+    }
+    
     console.log(`[Llama3] Processing request ${requestId}`);
     
     // Validate input
     const validationResult = llama3InputSchema.safeParse(req.body);
     
     if (!validationResult.success) {
+      const validationError = errorHandler.createError(
+        'Validation failed for Llama3 input',
+        ErrorCategory.VALIDATION,
+        validationResult.error.errors
+      );
+      
+      performanceMonitor.endOperation(requestId, true);
+      
       return res.status(400).json({ 
         error: 'Validation failed',
         details: validationResult.error.errors,
@@ -77,6 +102,11 @@ export async function llamaHandler(req: Request, res: Response) {
     }
     
     const { prompt, options, conversationId, systemPrompt = DEFAULT_SYSTEM_PROMPT } = validationResult.data;
+    
+    // Record request metrics
+    performanceMonitor.recordMetric('prompt_length', prompt.length);
+    performanceMonitor.recordMetric('temperature', options.temperature || 0.7);
+    performanceMonitor.recordMetric('max_tokens', options.maxTokens || 1024);
     
     // In a production environment, this would connect to a real Llama3 API
     // Here we'll implement a robust simulation with realistic behavior
@@ -88,6 +118,7 @@ export async function llamaHandler(req: Request, res: Response) {
     
     // Ensure we don't exceed context length
     if (totalPromptTokens > LLAMA_MODELS[DEFAULT_MODEL].contextLength) {
+      performanceMonitor.endOperation(requestId, true);
       return res.status(400).json({
         error: 'Input too long',
         message: `Your input of approximately ${totalPromptTokens} tokens exceeds the model's context length of ${LLAMA_MODELS[DEFAULT_MODEL].contextLength} tokens.`,
@@ -98,6 +129,12 @@ export async function llamaHandler(req: Request, res: Response) {
     // Log request for tracking
     console.log(`[Llama3] Request ${requestId}: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}`);
     console.log(`[Llama3] Parameters: temp=${options.temperature}, max_tokens=${options.maxTokens}`);
+    
+    // Reserve resources for inference
+    resourceManager.allocateResources('llama3_inference', {
+      estimated_tokens: totalPromptTokens + (options.maxTokens || 1024),
+      priority: 'normal'
+    });
     
     // Store conversation in memory if conversationId is provided and user is authenticated
     const userId = req.isAuthenticated() ? (req.user as any).id : null;
@@ -118,19 +155,30 @@ export async function llamaHandler(req: Request, res: Response) {
       } catch (storageError) {
         // Non-fatal error - log but continue
         console.error(`[Llama3] Failed to store user message: ${storageError}`);
+        errorHandler.handleError(storageError);
       }
     }
     
     // Simulate model processing time based on input length and options
     const processingDelay = calculateProcessingDelay(promptTokens, options.maxTokens);
+    performanceMonitor.startOperation('llama3_generation', requestId);
     await new Promise(resolve => setTimeout(resolve, processingDelay));
     
     // Generate response (in production, this would call the actual Llama3 API)
     const generatedText = generateLlamaResponse(prompt, systemPrompt, options);
+    performanceMonitor.endOperation('llama3_generation', false, { generation_time: processingDelay });
     
     // Calculate completion tokens (approximation)
     const completionTokens = estimateTokenCount(generatedText);
     const totalTokens = totalPromptTokens + completionTokens;
+    
+    // Record token usage
+    performanceMonitor.recordMetric('prompt_tokens', totalPromptTokens);
+    performanceMonitor.recordMetric('completion_tokens', completionTokens);
+    performanceMonitor.recordMetric('total_tokens', totalTokens);
+    
+    // Release allocated resources
+    resourceManager.releaseResources('llama3_inference');
     
     // Store AI response if conversation is being tracked
     if (userId && conversationId) {
@@ -151,6 +199,7 @@ export async function llamaHandler(req: Request, res: Response) {
       } catch (storageError) {
         // Non-fatal error - log but continue
         console.error(`[Llama3] Failed to store assistant message: ${storageError}`);
+        errorHandler.handleError(storageError);
       }
     }
     
@@ -170,6 +219,13 @@ export async function llamaHandler(req: Request, res: Response) {
     };
     
     console.log(`[Llama3] Completed request ${requestId} in ${response.metadata.processing_time.toFixed(2)}s`);
+    
+    // End performance tracking
+    performanceMonitor.endOperation(requestId, false, {
+      processing_time: response.metadata.processing_time,
+      tokens: totalTokens
+    });
+    
     return res.json(response);
     
   } catch (error) {
@@ -177,6 +233,18 @@ export async function llamaHandler(req: Request, res: Response) {
     const errorTime = (Date.now() - startTime) / 1000;
     
     console.error(`[Llama3] Error ${errorId} after ${errorTime.toFixed(2)}s:`, error);
+    
+    // Handle error properly with our error handler
+    const errorData = errorHandler.handleError(error, req);
+    
+    // Release any allocated resources if there was an error
+    resourceManager.releaseResources('llama3_inference');
+    
+    // End performance tracking with failure flag
+    performanceMonitor.endOperation(requestId, true, {
+      error_type: errorData.category,
+      error_time: errorTime
+    });
     
     return res.status(500).json({ 
       error: 'Failed to process with Llama3 model',
