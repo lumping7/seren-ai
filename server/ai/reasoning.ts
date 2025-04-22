@@ -403,9 +403,9 @@ async function performNeuroSymbolicReasoning(
         // Record the result of this step
         steps.push(`Result after ${operation.name}: ${currentState}`);
         
-      } catch (operationError) {
+      } catch (operationError: any) {
         // Handle per-operation errors but continue processing
-        const errorMessage = `Error during ${operation.name}: ${operationError.message}`;
+        const errorMessage = `Error during ${operation.name}: ${operationError.message || 'Unknown error'}`;
         console.error(`[Reasoning Engine] ${errorMessage}`);
         errors.push(errorMessage);
         steps.push(errorMessage);
@@ -427,18 +427,18 @@ async function performNeuroSymbolicReasoning(
       neuralComponentsUsed,
       errors
     };
-  } catch (error) {
+  } catch (error: any) {
     // Catch any unexpected errors to ensure we always return a valid result
     console.error('[Reasoning Engine] Critical error in reasoning process:', error);
     
     return {
-      outcome: `Error processing input: ${error.message}`,
+      outcome: `Error processing input: ${error.message || 'Unknown error'}`,
       confidence: 0,
-      steps: [`Error occurred during reasoning: ${error.message}`],
+      steps: [`Error occurred during reasoning: ${error.message || 'Unknown error'}`],
       executionTime: (Date.now() - startTime) / 1000,
       operationsExecuted: [],
       neuralComponentsUsed: [],
-      errors: [`Critical error: ${error.message}`]
+      errors: [`Critical error: ${error.message || 'Unknown error'}`]
     };
   }
 }
