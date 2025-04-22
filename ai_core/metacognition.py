@@ -22,11 +22,23 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
-# Import required libraries
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+# Import required libraries with fallbacks
+try:
+    import numpy as np
+    has_numpy = True
+except ImportError:
+    has_numpy = False
+    logger.warning("NumPy not available. Using fallback capabilities.")
+
+# Optional PyTorch for advanced neural network capabilities
+try:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    has_torch = True
+except ImportError:
+    has_torch = False
+    logger.warning("PyTorch not available. Using simplified metacognitive capabilities.")
 
 # Local imports
 from ai_core.neurosymbolic_reasoning import neurosymbolic_reasoning, ReasoningStrategy, Formula

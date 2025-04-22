@@ -11,140 +11,149 @@ import math
 import random
 import logging
 import time
-import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Union, Callable
 
-# Add parent directory to path for imports
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if parent_dir not in sys.path:
-    sys.path.append(parent_dir)
-
-# Import PyTorch
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.optim import Adam
-from torch.utils.data import Dataset, DataLoader
-from torch.cuda.amp import autocast, GradScaler
-
-# Configure logging
+# Configure logging first
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-class LiquidNeuron(nn.Module):
-    """Individual liquid neuron with time-based dynamics"""
-    
-    def __init__(
-        self,
-        input_dim: int,
-        time_constant: float = 1.0,
-        activation: str = 'tanh',
-        use_bias: bool = True,
-        adaptive_threshold: bool = True,
-        noise_level: float = 0.01
-    ):
-        """
-        Initialize a liquid neuron
-        
-        Args:
-            input_dim: Input dimension
-            time_constant: Time constant for dynamics (tau)
-            activation: Activation function ('tanh', 'relu', 'sigmoid')
-            use_bias: Whether to use bias
-            adaptive_threshold: Whether to use adaptive threshold
-            noise_level: Level of noise for stochasticity
-        """
-        super().__init__()
-        
-        self.input_dim = input_dim
-        self.time_constant = time_constant
-        self.use_bias = use_bias
-        self.adaptive_threshold = adaptive_threshold
-        self.noise_level = noise_level
-        
-        # Weights and bias
-        self.weight = nn.Parameter(torch.Tensor(input_dim))
-        if use_bias:
-            self.bias = nn.Parameter(torch.Tensor(1))
-        
-        # Time-dependent state
-        self.register_buffer('state', torch.zeros(1))
-        
-        # Adaptive threshold
-        if adaptive_threshold:
-            self.threshold = nn.Parameter(torch.Tensor(1))
-        
-        # Time-decay factor
-        self.decay_factor = math.exp(-1.0 / time_constant)
-        
-        # Set activation function
-        if activation == 'tanh':
-            self.activation = torch.tanh
-        elif activation == 'relu':
-            self.activation = F.relu
-        elif activation == 'sigmoid':
-            self.activation = torch.sigmoid
-        else:
-            raise ValueError(f"Unknown activation: {activation}")
-        
-        self.reset_parameters()
-    
-    def reset_parameters(self):
-        """Initialize parameters"""
-        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-        if self.use_bias:
-            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)
-            bound = 1 / math.sqrt(fan_in)
-            nn.init.uniform_(self.bias, -bound, bound)
-        
-        if self.adaptive_threshold:
-            nn.init.constant_(self.threshold, 0.0)
-    
-    def forward(self, x, prev_state=None):
-        """
-        Forward pass
-        
-        Args:
-            x: Input tensor
-            prev_state: Previous state
-            
-        Returns:
-            (output, new_state)
-        """
-        # Calculate weighted input
-        z = F.linear(x, self.weight, self.bias if self.use_bias else None)
-        
-        # Apply adaptive threshold if enabled
-        if self.adaptive_threshold:
-            z = z - self.threshold
-        
-        # Add stochastic noise for robustness
-        if self.training and self.noise_level > 0:
-            z = z + torch.randn_like(z) * self.noise_level
-        
-        # Use provided state or current internal state
-        if prev_state is not None:
-            state = prev_state
-        else:
-            state = self.state
-        
-        # Update state with temporal dynamics
-        new_state = self.decay_factor * state + (1 - self.decay_factor) * z
-        
-        # Apply activation function
-        output = self.activation(new_state)
-        
-        # Update internal state
-        if prev_state is None:
-            self.state = new_state.detach()
-        
-        return output, new_state
+# Add parent directory to path for imports
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
 
-class LiquidLayer(nn.Module):
-    """Layer of liquid neurons with different time constants"""
+# Import NumPy with fallback
+try:
+    import numpy as np
+    has_numpy = True
+except ImportError:
+    has_numpy = False
+    logger.warning("NumPy not available. Limited functionality for liquid neural networks.")
+
+# Import PyTorch with fallback
+try:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    from torch.optim import Adam
+    from torch.utils.data import Dataset, DataLoader
+    from torch.cuda.amp import autocast, GradScaler
+    has_torch = True
+except ImportError:
+    has_torch = False
+    logger.warning("PyTorch not available. Liquid neural networks will operate in simplified mode.")
+
+# Define a base class to handle cases where PyTorch is not available
+class LiquidNeuronBase:
+    """Base class for liquid neuron implementation that works with or without PyTorch"""
+    pass
+
+# Conditional implementation based on PyTorch availability
+if has_torch:
+    class LiquidNeuron(nn.Module):
+        """Individual liquid neuron with time-based dynamics"""
+        
+        def __init__(
+            self,
+            input_dim: int,
+            time_constant: float = 1.0,
+            activation: str = 'tanh',
+            use_bias: bool = True,
+            adaptive_threshold: bool = True,
+            noise_level: float = 0.01
+        ):
+            """
+            Initialize a liquid neuron
+            
+            Args:
+                input_dim: Input dimension
+                time_constant: Time constant for dynamics (tau)
+                activation: Activation function ('tanh', 'relu', 'sigmoid')
+                use_bias: Whether to use bias
+                adaptive_threshold: Whether to use adaptive threshold
+                noise_level: Level of noise for stochasticity
+            """
+            super().__init__()
+            
+            self.input_dim = input_dim
+            self.time_constant = time_constant
+            self.use_bias = use_bias
+            self.adaptive_threshold = adaptive_threshold
+            self.noise_level = noise_level
+            
+            # Weights and bias
+            self.weight = nn.Parameter(torch.Tensor(input_dim))
+            if use_bias:
+                self.bias = nn.Parameter(torch.Tensor(1))
+            
+            # Time-dependent state
+            self.register_buffer('state', torch.zeros(1))
+            
+            # Adaptive threshold
+            if adaptive_threshold:
+                self.threshold = nn.Parameter(torch.Tensor(1))
+            
+            # Time-decay factor
+            self.decay_factor = math.exp(-1.0 / time_constant)
+            
+            # Set activation function
+            if activation == 'tanh':
+                self.activation = torch.tanh
+            elif activation == 'relu':
+                self.activation = F.relu
+            elif activation == 'sigmoid':
+                self.activation = torch.sigmoid
+            else:
+                raise ValueError(f"Unknown activation: {activation}")
+            
+            self.reset_parameters()
+else:
+    # Simplified implementation that doesn't rely on PyTorch
+    class LiquidNeuron(LiquidNeuronBase):
+        """Simplified liquid neuron implementation when PyTorch is not available"""
+        
+        def __init__(
+            self,
+            input_dim: int,
+            time_constant: float = 1.0,
+            activation: str = 'tanh',
+            use_bias: bool = True,
+            adaptive_threshold: bool = True,
+            noise_level: float = 0.01
+        ):
+            """
+            Initialize a simplified liquid neuron
+            
+            Args:
+                input_dim: Input dimension
+                time_constant: Time constant for dynamics (tau)
+                activation: Activation function ('tanh', 'relu', 'sigmoid')
+                use_bias: Whether to use bias
+                adaptive_threshold: Whether to use adaptive threshold
+                noise_level: Level of noise for stochasticity
+            """
+            self.input_dim = input_dim
+            self.time_constant = time_constant
+            self.use_bias = use_bias
+            self.adaptive_threshold = adaptive_threshold
+            self.noise_level = noise_level
+            self.decay_factor = math.exp(-1.0 / time_constant)
+            
+            # Log warning about simplified implementation
+            logger.warning("Using simplified LiquidNeuron implementation without PyTorch")
+            
+            # Define default methods for the simplified implementation
+            def forward(self, x, prev_state=None):
+                """Simplified forward pass implementation"""
+                logger.warning("LiquidNeuron forward pass invoked without PyTorch - returning None")
+                return None, None
+
+# Define a base class to handle cases where PyTorch is not available
+class LiquidLayerBase:
+    """Base class for liquid layer implementation"""
     
     def __init__(
         self,
@@ -157,118 +166,187 @@ class LiquidLayer(nn.Module):
         adaptive_threshold: bool = True,
         connection_sparsity: float = 0.0
     ):
-        """
-        Initialize a liquid layer
-        
-        Args:
-            input_dim: Input dimension
-            output_dim: Output dimension
-            time_constants: List of time constants for neurons
-            activation: Activation function
-            dropout: Dropout probability
-            use_layer_norm: Whether to use layer normalization
-            adaptive_threshold: Whether neurons use adaptive thresholds
-            connection_sparsity: Sparsity of connections (0-1)
-        """
-        super().__init__()
-        
+        """Initialize the base layer"""
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.time_constants = time_constants
         self.dropout_rate = dropout
         self.use_layer_norm = use_layer_norm
         self.connection_sparsity = connection_sparsity
+
+# Conditional implementation based on PyTorch availability
+if has_torch:
+    class LiquidLayer(nn.Module):
+        """Layer of liquid neurons with different time constants"""
         
-        # Number of time constants
-        self.num_constants = len(time_constants)
-        
-        # Ensure output_dim is divisible by number of time constants
-        assert output_dim % self.num_constants == 0, f"Output dimension must be divisible by {self.num_constants}"
-        
-        # Neurons per time constant
-        self.group_size = output_dim // self.num_constants
-        
-        # Create neuron groups for each time constant
-        self.neuron_groups = nn.ModuleList()
-        
-        for tau in time_constants:
-            # Create a group of neurons with the same time constant
-            neurons = nn.ModuleList([
-                LiquidNeuron(
-                    input_dim=input_dim,
-                    time_constant=tau,
-                    activation=activation,
-                    adaptive_threshold=adaptive_threshold
-                ) for _ in range(self.group_size)
-            ])
-            self.neuron_groups.append(neurons)
-        
-        # Connection mask for sparse connectivity
-        if connection_sparsity > 0:
-            mask = torch.rand(output_dim, input_dim) > connection_sparsity
-            self.register_buffer('connection_mask', mask)
-        else:
-            self.connection_mask = None
-        
-        # Layer normalization
-        if use_layer_norm:
-            self.layer_norm = nn.LayerNorm(output_dim)
-        
-        # Dropout
-        self.dropout = nn.Dropout(dropout)
-    
-    def forward(self, x, prev_states=None):
-        """
-        Forward pass
-        
-        Args:
-            x: Input tensor [batch_size, input_dim]
-            prev_states: Previous states for neurons
+        def __init__(
+            self,
+            input_dim: int,
+            output_dim: int,
+            time_constants: List[float] = [0.1, 0.5, 1.0, 5.0, 10.0],
+            activation: str = 'tanh',
+            dropout: float = 0.1,
+            use_layer_norm: bool = True,
+            adaptive_threshold: bool = True,
+            connection_sparsity: float = 0.0
+        ):
+            """
+            Initialize a liquid layer
             
-        Returns:
-            (output, new_states)
-        """
-        batch_size = x.shape[0]
-        device = x.device
+            Args:
+                input_dim: Input dimension
+                output_dim: Output dimension
+                time_constants: List of time constants for neurons
+                activation: Activation function
+                dropout: Dropout probability
+                use_layer_norm: Whether to use layer normalization
+                adaptive_threshold: Whether neurons use adaptive thresholds
+                connection_sparsity: Sparsity of connections (0-1)
+            """
+            super().__init__()
+            
+            self.input_dim = input_dim
+            self.output_dim = output_dim
+            self.time_constants = time_constants
+            self.dropout_rate = dropout
+            self.use_layer_norm = use_layer_norm
+            self.connection_sparsity = connection_sparsity
+            
+            # Number of time constants
+            self.num_constants = len(time_constants)
+            
+            # Ensure output_dim is divisible by number of time constants
+            assert output_dim % self.num_constants == 0, f"Output dimension must be divisible by {self.num_constants}"
+            
+            # Neurons per time constant
+            self.group_size = output_dim // self.num_constants
+            
+            # Create neuron groups for each time constant
+            self.neuron_groups = nn.ModuleList()
+            
+            for tau in time_constants:
+                # Create a group of neurons with the same time constant
+                neurons = nn.ModuleList([
+                    LiquidNeuron(
+                        input_dim=input_dim,
+                        time_constant=tau,
+                        activation=activation,
+                        adaptive_threshold=adaptive_threshold
+                    ) for _ in range(self.group_size)
+                ])
+                self.neuron_groups.append(neurons)
+            
+            # Connection mask for sparse connectivity
+            if connection_sparsity > 0:
+                mask = torch.rand(output_dim, input_dim) > connection_sparsity
+                self.register_buffer('connection_mask', mask)
+            else:
+                self.connection_mask = None
+            
+            # Layer normalization
+            if use_layer_norm:
+                self.layer_norm = nn.LayerNorm(output_dim)
+            
+            # Dropout
+            self.dropout = nn.Dropout(dropout)
         
-        # Initialize output and new states
-        output = torch.zeros(batch_size, self.output_dim, device=device)
-        new_states = torch.zeros(batch_size, self.output_dim, device=device)
-        
-        # Apply sparse connectivity if enabled
-        if self.connection_mask is not None:
-            # Create a sparse input for each neuron
-            sparse_inputs = [x * self.connection_mask[i].unsqueeze(0) for i in range(self.output_dim)]
-        else:
-            sparse_inputs = [x] * self.output_dim
-        
-        # Process through each neuron group
-        idx = 0
-        for g, group in enumerate(self.neuron_groups):
-            for n, neuron in enumerate(group):
-                # Get previous state if provided
-                if prev_states is not None:
-                    prev_state = prev_states[:, idx].unsqueeze(1)
-                else:
-                    prev_state = None
+        def forward(self, x, prev_states=None):
+            """
+            Forward pass
+            
+            Args:
+                x: Input tensor [batch_size, input_dim]
+                prev_states: Previous states for neurons
                 
-                # Forward through neuron
-                neuron_out, neuron_state = neuron(sparse_inputs[idx], prev_state)
-                
-                # Store results
-                output[:, idx] = neuron_out.squeeze()
-                new_states[:, idx] = neuron_state.squeeze()
-                
-                idx += 1
+            Returns:
+                (output, new_states)
+            """
+            batch_size = x.shape[0]
+            device = x.device
+            
+            # Initialize output and new states
+            output = torch.zeros(batch_size, self.output_dim, device=device)
+            new_states = torch.zeros(batch_size, self.output_dim, device=device)
+            
+            # Apply sparse connectivity if enabled
+            if self.connection_mask is not None:
+                # Create a sparse input for each neuron
+                sparse_inputs = [x * self.connection_mask[i].unsqueeze(0) for i in range(self.output_dim)]
+            else:
+                sparse_inputs = [x] * self.output_dim
+            
+            # Process through each neuron group
+            idx = 0
+            for g, group in enumerate(self.neuron_groups):
+                for n, neuron in enumerate(group):
+                    # Get previous state if provided
+                    if prev_states is not None:
+                        prev_state = prev_states[:, idx].unsqueeze(1)
+                    else:
+                        prev_state = None
+                    
+                    # Forward through neuron
+                    neuron_out, neuron_state = neuron(sparse_inputs[idx], prev_state)
+                    
+                    # Store results
+                    output[:, idx] = neuron_out.squeeze()
+                    new_states[:, idx] = neuron_state.squeeze()
+                    
+                    idx += 1
+            
+            # Apply layer normalization if enabled
+            if self.use_layer_norm:
+                output = self.layer_norm(output)
+            
+            # Apply dropout
+            output = self.dropout(output)
+            
+            return output, new_states
+else:
+    # Simplified implementation that doesn't rely on PyTorch
+    class LiquidLayer(LiquidLayerBase):
+        """Simplified liquid layer implementation when PyTorch is not available"""
         
-        # Apply layer normalization if enabled
-        if self.use_layer_norm:
-            output = self.layer_norm(output)
+        def __init__(
+            self,
+            input_dim: int,
+            output_dim: int,
+            time_constants: List[float] = [0.1, 0.5, 1.0, 5.0, 10.0],
+            activation: str = 'tanh',
+            dropout: float = 0.1,
+            use_layer_norm: bool = True,
+            adaptive_threshold: bool = True,
+            connection_sparsity: float = 0.0
+        ):
+            """
+            Initialize a simplified liquid layer
+            
+            Args:
+                input_dim: Input dimension
+                output_dim: Output dimension
+                time_constants: List of time constants for neurons
+                activation: Activation function
+                dropout: Dropout probability
+                use_layer_norm: Whether to use layer normalization
+                adaptive_threshold: Whether neurons use adaptive thresholds
+                connection_sparsity: Sparsity of connections (0-1)
+            """
+            super().__init__(
+                input_dim, 
+                output_dim, 
+                time_constants,
+                activation,
+                dropout,
+                use_layer_norm,
+                adaptive_threshold,
+                connection_sparsity
+            )
+            logger.warning("Using simplified LiquidLayer implementation without PyTorch")
         
-        # Apply dropout
-        output = self.dropout(output)
-        
-        return output, new_states
+        def forward(self, x, prev_states=None):
+            """Simplified forward pass implementation"""
+            logger.warning("LiquidLayer forward pass invoked without PyTorch - returning None")
+            return None, None
 
 class LiquidBlock(nn.Module):
     """Block of liquid layers with residual connections"""
