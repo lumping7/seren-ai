@@ -2141,29 +2141,9 @@ class NeuroSymbolicReasoning:
         Returns:
             Neural embedding
         """
-        if not has_torch:
-            # Simulation mode
-            return torch.rand(1, self.neural_embedding_size)
-        
-        # Simple embedding model for demonstration
-        # Real system would use language model embeddings
-        
-        # Convert to lowercase and tokenize
-        tokens = query.lower().split()
-        
-        # Create embeddings (simulated)
-        embedding = torch.zeros(1, self.neural_embedding_size)
-        
-        for token in tokens:
-            # Simulate word embedding
-            token_embedding = torch.randn(1, self.neural_embedding_size)
-            embedding += token_embedding
-        
-        # Normalize
-        if torch.norm(embedding) > 0:
-            embedding = embedding / torch.norm(embedding)
-        
-        return embedding
+        # Use our tokenization and embedding helper methods
+        tokens = self._tokenize_query(query)
+        return self._embed_tokens(tokens)
     
     def add_knowledge_from_text(self, text: str, as_formula: bool = False) -> Dict[str, Any]:
         """
@@ -2190,21 +2170,37 @@ class NeuroSymbolicReasoning:
                     "error": "Could not convert to logical formula"
                 }
         else:
-            # Add as-is to knowledge library if available
-            if has_knowledge_lib:
+            # Add as-is to knowledge library
+            try:
+                # Import the knowledge library
+                from ai_core.knowledge.library import knowledge_library
+                
+                # Add knowledge to the library
                 entry_ids = knowledge_library.add_knowledge_from_text(
                     text=text,
                     source_reference="user_input",
-                    metadata={"added_by": "neurosymbolic_reasoning"}
+                    metadata={
+                        "added_by": "neurosymbolic_reasoning",
+                        "timestamp": datetime.datetime.now().isoformat(),
+                        "reasoning_state": {
+                            "neural_weight": self.neural_weight,
+                            "knowledge_base_size": len(self.knowledge_base.formulas)
+                        }
+                    }
                 )
+                
+                # Return success with entry IDs
                 return {
                     "added": len(entry_ids) > 0,
-                    "entry_ids": entry_ids
+                    "entry_ids": entry_ids,
+                    "timestamp": datetime.datetime.now().isoformat()
                 }
-            else:
+            except (ImportError, AttributeError) as e:
+                # Handle case where knowledge library is not available
+                logger.warning(f"Knowledge library not available: {str(e)}")
                 return {
                     "added": False,
-                    "error": "Knowledge library not available"
+                    "error": f"Knowledge library not available: {str(e)}"
                 }
     
     def _retrieve_knowledge(self, query: str, domains: List[str] = None) -> List[Dict[str, Any]]:
@@ -2218,23 +2214,49 @@ class NeuroSymbolicReasoning:
         Returns:
             List of knowledge entries
         """
-        if not has_knowledge_lib:
+        try:
+            # Import knowledge library
+            from ai_core.knowledge.library import knowledge_library
+            
+            # Default domains if none provided
+            if domains is None:
+                domains = []
+                
+            # Search knowledge library
+            entries = knowledge_library.search_knowledge(
+                query_text=query, 
+                limit=5, 
+                categories=domains,
+                min_relevance=0.2
+            )
+            
+            # Convert to structured dict format
+            result = []
+            for entry in entries:
+                # Extract metadata with defaults
+                metadata = entry.metadata or {}
+                confidence = metadata.get("_search_score", 0.5)
+                timestamp = metadata.get("timestamp", datetime.datetime.now().isoformat())
+                
+                # Convert entry to dict format
+                entry_dict = {
+                    "id": entry.id,
+                    "content": entry.content,
+                    "source": entry.source_reference,
+                    "categories": getattr(entry, "categories", []),
+                    "confidence": confidence,
+                    "timestamp": timestamp,
+                    "metadata": metadata
+                }
+                
+                result.append(entry_dict)
+            
+            return result
+            
+        except (ImportError, AttributeError) as e:
+            # Handle case where knowledge library is not available
+            logger.warning(f"Knowledge library not available for retrieval: {str(e)}")
             return []
-        
-        # Search knowledge library
-        entries = knowledge_library.search_knowledge(query, limit=5, categories=domains)
-        
-        # Convert to dicts
-        result = []
-        for entry in entries:
-            result.append({
-                "content": entry.content,
-                "source": entry.source_reference,
-                "categories": entry.categories if hasattr(entry, "categories") else [],
-                "confidence": entry.metadata.get("_search_score", 0.5) if entry.metadata else 0.5
-            })
-        
-        return result
     
     def continuous_reasoning(
         self, 

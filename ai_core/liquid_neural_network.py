@@ -913,10 +913,6 @@ class ContinuousLearningSystem:
             use_memory: Whether to use memory component
             device: Device to use
         """
-        if not has_torch:
-            logger.warning("PyTorch not available. Continuous learning system will be simulated.")
-            return
-        
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.hidden_dim = hidden_dim
