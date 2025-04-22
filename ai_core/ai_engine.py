@@ -229,6 +229,21 @@ class AIEngine:
         system_message = settings.get("system_message", "You are Seren, a powerful AI assistant. Be concise and helpful.")
         messages.append({"role": "system", "content": system_message})
         
+        # Try to get relevant knowledge from the knowledge library
+        try:
+            from ai_core.knowledge.library import knowledge_library
+            # Get relevant knowledge for the query
+            knowledge_context = knowledge_library.extract_context_for_query(query)
+            if knowledge_context:
+                # Add knowledge to system message to provide context
+                knowledge_prompt = f"\nThe following information from my knowledge library may be helpful:\n{knowledge_context}\n\nPlease use this information in your response when relevant."
+                system_message += knowledge_prompt
+                # Update the system message in the messages list
+                messages[0]["content"] = system_message
+        except ImportError:
+            # Knowledge library not available, continue without it
+            pass
+        
         # Add conversation history
         conversation_messages = self.conversations[conversation_id]["messages"]
         max_history = settings.get("max_history", 10)
@@ -260,6 +275,22 @@ class AIEngine:
                 "content": response_text,
                 "timestamp": datetime.now().isoformat()
             })
+            
+            # Try to learn from this interaction
+            try:
+                from ai_core.knowledge.self_learning import self_learning_system, LearningPriority
+                # Check if this is a particularly informative exchange that we should learn from
+                if len(query) > 100 and len(response_text) > 200:
+                    # Add the conversation to the learning queue with low priority
+                    self_learning_system.add_learning_task(
+                        content=f"User query: {query}\n\nAI response: {response_text}",
+                        source=f"conversation:{conversation_id}",
+                        priority=LearningPriority.LOW,
+                        metadata={"interaction_type": "query_response"}
+                    )
+            except ImportError:
+                # Self-learning system not available, continue without it
+                pass
             
             # Calculate and update response time
             response_time = time.time() - start_time

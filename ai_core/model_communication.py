@@ -1,8 +1,7 @@
 """
 Model Communication System for Seren
 
-Provides mechanisms for advanced inter-model communication, collaboration,
-and information exchange within the OpenManus architecture.
+Enables secure communication and knowledge sharing between different AI models.
 """
 
 import os
@@ -11,19 +10,41 @@ import json
 import logging
 import time
 import uuid
-from enum import Enum
-from typing import Dict, List, Optional, Any, Union, Set, Tuple, Callable
-from datetime import datetime
-import threading
-import queue
+import datetime
+from typing import Dict, List, Optional, Any, Union
 
 # Add parent directory to path for imports
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
-# Import security components
-from security.quantum_encryption import quantum_encryption, SecurityLevel
+# For security
+try:
+    from security.quantum_encryption import encrypt_message, decrypt_message
+except ImportError:
+    # Fallback if security module not available
+    def encrypt_message(message, recipient=None):
+        return message
+
+    def decrypt_message(encrypted_message, recipient=None):
+        return encrypted_message
+
+# Local imports
+try:
+    from ai_core.model_manager import ModelType
+except ImportError:
+    # Create a basic ModelType enum if model_manager not available
+    class ModelType:
+        QWEN = "qwen"
+        OLYMPIC = "olympic"
+
+# Try to import knowledge library
+try:
+    from ai_core.knowledge.library import knowledge_library, KnowledgeSource
+    has_knowledge_lib = True
+except ImportError:
+    has_knowledge_lib = False
+    logging.warning("Knowledge library not available. Knowledge sharing will be disabled.")
 
 # Configure logging
 logging.basicConfig(
@@ -32,695 +53,543 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class ModelType(Enum):
-    """Types of models in the system"""
-    QWEN = "qwen"           # Qwen model (previously Llama)
-    OLYMPIC = "olympic"     # Olympic Coder model (previously Gemma)
-    HYBRID = "hybrid"       # Hybrid model (combined capabilities)
-    SYSTEM = "system"       # System-generated messages
+class MessageType:
+    """Types of messages between models"""
+    QUERY = "query"
+    RESPONSE = "response"
+    INFO = "info"
+    ERROR = "error"
+    CODE = "code"
+    KNOWLEDGE = "knowledge"
+    REASONING = "reasoning"
+    REQUEST_HELP = "request_help"
+    PROVIDE_HELP = "provide_help"
 
-class MessageType(Enum):
-    """Types of inter-model messages"""
-    QUESTION = "question"      # Question from one model to another
-    ANSWER = "answer"          # Answer to a question
-    SUGGESTION = "suggestion"  # Suggestion for improvement
-    CRITIQUE = "critique"      # Critique of a solution
-    REFINEMENT = "refinement"  # Refinement of a previous solution
-    STATUS = "status"          # Status update
-    ERROR = "error"            # Error message
-    SYSTEM = "system"          # System message
-
-class CollaborationMode(Enum):
-    """Modes of model collaboration"""
-    COLLABORATIVE = "collaborative"  # Models work together on the same task
-    SPECIALIZED = "specialized"      # Models work on different aspects of a task
-    COMPETITIVE = "competitive"      # Models compete to produce the best solution
+class CommunicationMode:
+    """Communication modes between models"""
+    COLLABORATIVE = "collaborative"  # Models work together, sharing knowledge
+    SPECIALIZED = "specialized"      # Models work on specific tasks based on their strengths
+    COMPETITIVE = "competitive"      # Models compete to provide the best answers
 
 class CommunicationSystem:
     """
-    Model Communication System for Seren
+    Communication System for Seren
     
-    Provides mechanisms for advanced inter-model communication, collaboration,
-    and information exchange:
-    - Model-to-model messaging
-    - Multi-agent conversations
-    - Structured knowledge exchange
-    - Collaborative problem-solving
-    - Query and response patterns
-    
-    Bleeding-edge capabilities:
-    1. Context-aware communication
-    2. Cross-model knowledge synthesis
-    3. Parallel collaborative reasoning
-    4. Self-reflection and model criticism
-    5. Structured output negotiation
+    Enables secure communication and knowledge sharing between AI models:
+    - Message passing between models
+    - Collaborative problem solving
+    - Knowledge sharing and integration
+    - Secure communication with encryption
+    - Conversation history tracking
     """
     
     def __init__(self, base_dir: str = None):
-        """Initialize the communication system"""
-        # Set the base directory
+        """
+        Initialize the communication system
+        
+        Args:
+            base_dir: Base directory for storing conversation data
+        """
+        # Set base directory
         self.base_dir = base_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
-        # Conversations registry
-        self.conversations = {}
+        # Create directories
+        self.comm_dir = os.path.join(self.base_dir, "data", "communications")
+        os.makedirs(self.comm_dir, exist_ok=True)
         
-        # Active participants
-        self.participants = {
-            ModelType.QWEN.value: True,
-            ModelType.OLYMPIC.value: True,
-            ModelType.HYBRID.value: False,
-            ModelType.SYSTEM.value: True
-        }
+        # Conversations storage
+        self.conversations = {}  # id -> conversation data
         
-        # Message queues (model-specific)
-        self.message_queues = {
-            ModelType.QWEN.value: queue.Queue(),
-            ModelType.OLYMPIC.value: queue.Queue(),
-            ModelType.HYBRID.value: queue.Queue(),
-            ModelType.SYSTEM.value: queue.Queue()
-        }
-        
-        # Message history
-        self.message_history = []
-        
-        # Communication stats
-        self.stats = {
-            "messages_sent": 0,
-            "messages_by_type": {message_type.value: 0 for message_type in MessageType},
-            "messages_by_model": {model_type.value: 0 for model_type in ModelType},
-            "conversations_created": 0,
-            "average_response_time": 0
-        }
-        
-        # Start message processors
-        self._start_message_processors()
-        
-        # Current collaboration mode
-        self.collaboration_mode = CollaborationMode.COLLABORATIVE
+        # Load existing conversations
+        self._load_conversations()
         
         logger.info("Communication System initialized")
     
-    def _start_message_processors(self) -> None:
-        """Start the message processing threads"""
-        # In a real implementation, this would start actual threads
-        # For simulation, we'll just set up placeholders
-        self.message_processors = {}
-        
-        # This would be threaded in a real implementation
-        # for model_type in ModelType:
-        #     processor = threading.Thread(
-        #         target=self._process_messages,
-        #         args=(model_type.value,),
-        #         daemon=True
-        #     )
-        #     processor.start()
-        #     self.message_processors[model_type.value] = processor
-    
-    def _process_messages(self, model_type: str) -> None:
-        """
-        Process messages for a specific model
-        
-        Args:
-            model_type: Type of model to process messages for
-        """
-        # In a real implementation, this would be a thread function
-        message_queue = self.message_queues.get(model_type)
-        
-        if not message_queue:
-            logger.error(f"No message queue for model type: {model_type}")
-            return
-        
-        while True:
+    def _load_conversations(self) -> None:
+        """Load existing conversations"""
+        conv_file = os.path.join(self.comm_dir, "conversations.json")
+        if os.path.exists(conv_file):
             try:
-                # Get next message from queue
-                message = message_queue.get(timeout=1)
-                
-                # Process message (in a real implementation, this would route to the model)
-                logger.info(f"Processing message for {model_type}: {message['id']}")
-                
-                # Mark as done
-                message_queue.task_done()
-            
-            except queue.Empty:
-                # No messages, continue
-                continue
-            
+                with open(conv_file, 'r', encoding='utf-8') as f:
+                    self.conversations = json.load(f)
+                logger.info(f"Loaded {len(self.conversations)} conversations")
             except Exception as e:
-                logger.error(f"Error processing message for {model_type}: {str(e)}")
+                logger.error(f"Error loading conversations: {str(e)}")
     
-    def create_conversation(
-        self,
-        topic: str,
-        participants: List[Union[ModelType, str]],
-        context: Dict[str, Any] = None
-    ) -> str:
+    def _save_conversations(self) -> None:
+        """Save conversations"""
+        try:
+            conv_file = os.path.join(self.comm_dir, "conversations.json")
+            with open(conv_file, 'w', encoding='utf-8') as f:
+                json.dump(self.conversations, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Error saving conversations: {str(e)}")
+    
+    def create_conversation(self, topic: str = None, mode: str = CommunicationMode.COLLABORATIVE) -> str:
         """
         Create a new conversation
         
         Args:
-            topic: Conversation topic
-            participants: List of participants
-            context: Additional context
+            topic: Topic of the conversation
+            mode: Communication mode
             
         Returns:
             Conversation ID
         """
-        # Generate conversation ID
+        # Generate ID
         conversation_id = str(uuid.uuid4())
         
-        # Convert participants to string if needed
-        participant_values = []
-        for participant in participants:
-            if isinstance(participant, ModelType):
-                participant_values.append(participant.value)
-            else:
-                # Validate participant
-                try:
-                    ModelType(participant)
-                    participant_values.append(participant)
-                except ValueError:
-                    logger.warning(f"Invalid participant type: {participant}")
-        
-        # Create conversation
-        conversation = {
+        # Initialize conversation
+        self.conversations[conversation_id] = {
             "id": conversation_id,
-            "topic": topic,
-            "participants": participant_values,
-            "messages": [],
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
-            "context": context or {},
-            "status": "active"
+            "topic": topic or "General Conversation",
+            "mode": mode,
+            "created_at": datetime.datetime.now().isoformat(),
+            "participants": [],
+            "messages": []
         }
         
-        # Store conversation
-        self.conversations[conversation_id] = conversation
+        # Save conversations
+        self._save_conversations()
         
-        # Update stats
-        self.stats["conversations_created"] += 1
-        
-        # Add system message
-        self.add_message(
-            conversation_id=conversation_id,
-            from_model=ModelType.SYSTEM.value,
-            message_type=MessageType.SYSTEM.value,
-            content=f"Conversation started: {topic}",
-            metadata={
-                "participants": participant_values
-            }
-        )
-        
-        logger.info(f"Conversation created: {conversation_id} - {topic}")
-        
+        logger.info(f"Created conversation {conversation_id}")
         return conversation_id
     
-    def add_message(
-        self,
-        conversation_id: str,
-        from_model: Union[ModelType, str],
-        message_type: Union[MessageType, str],
-        content: str,
-        to_model: Union[ModelType, str, None] = None,
-        metadata: Dict[str, Any] = None
-    ) -> Dict[str, Any]:
+    def get_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         """
-        Add a message to a conversation
+        Get a conversation by ID
         
         Args:
-            conversation_id: Conversation ID
-            from_model: Source model
-            message_type: Type of message
-            content: Message content
-            to_model: Target model (if applicable)
-            metadata: Additional metadata
+            conversation_id: ID of the conversation
             
         Returns:
-            Added message
+            Conversation data or None if not found
         """
-        # Check if conversation exists
+        return self.conversations.get(conversation_id)
+    
+    def add_participant(self, conversation_id: str, model_type: ModelType) -> bool:
+        """
+        Add a participant to a conversation
+        
+        Args:
+            conversation_id: ID of the conversation
+            model_type: Type of the participating model
+            
+        Returns:
+            Success status
+        """
         if conversation_id not in self.conversations:
             logger.error(f"Conversation not found: {conversation_id}")
-            return {"error": f"Conversation not found: {conversation_id}"}
+            return False
         
-        # Convert model types to string if needed
-        from_model_value = from_model.value if isinstance(from_model, ModelType) else from_model
-        to_model_value = to_model.value if isinstance(to_model, ModelType) else to_model
+        conversation = self.conversations[conversation_id]
+        model_id = model_type.value
         
-        # Convert message type to string if needed
-        message_type_value = message_type.value if isinstance(message_type, MessageType) else message_type
+        if model_id not in conversation["participants"]:
+            conversation["participants"].append(model_id)
+            self._save_conversations()
+            logger.info(f"Added {model_id} to conversation {conversation_id}")
         
-        # Generate message ID
-        message_id = str(uuid.uuid4())
+        return True
+    
+    def send_message(
+        self,
+        conversation_id: str,
+        from_model: ModelType,
+        to_model: Optional[ModelType] = None,
+        message_type: str = MessageType.INFO,
+        content: str = "",
+        encrypted: bool = True
+    ) -> bool:
+        """
+        Send a message in a conversation
+        
+        Args:
+            conversation_id: ID of the conversation
+            from_model: Sender model
+            to_model: Recipient model (None for broadcast)
+            message_type: Type of message
+            content: Message content
+            encrypted: Whether to encrypt the message
+            
+        Returns:
+            Success status
+        """
+        if conversation_id not in self.conversations:
+            logger.error(f"Conversation not found: {conversation_id}")
+            return False
+        
+        conversation = self.conversations[conversation_id]
+        
+        # Add sender to participants if not already
+        from_id = from_model.value
+        if from_id not in conversation["participants"]:
+            conversation["participants"].append(from_id)
+        
+        # Add recipient to participants if specified and not already
+        to_id = to_model.value if to_model else None
+        if to_id and to_id not in conversation["participants"]:
+            conversation["participants"].append(to_id)
+        
+        # Encrypt content if needed
+        if encrypted:
+            encrypted_content = encrypt_message(content, to_id)
+        else:
+            encrypted_content = content
         
         # Create message
         message = {
-            "id": message_id,
-            "conversation_id": conversation_id,
-            "from": from_model_value,
-            "to": to_model_value,
-            "type": message_type_value,
-            "content": content,
-            "timestamp": datetime.now().isoformat(),
-            "metadata": metadata or {}
+            "id": str(uuid.uuid4()),
+            "from_model": from_id,
+            "to_model": to_id,  # None for broadcast
+            "message_type": message_type,
+            "content": encrypted_content,
+            "encrypted": encrypted,
+            "timestamp": datetime.datetime.now().isoformat()
         }
         
         # Add to conversation
-        conversation = self.conversations[conversation_id]
         conversation["messages"].append(message)
-        conversation["updated_at"] = datetime.now().isoformat()
         
-        # Add to message history
-        self.message_history.append(message)
+        # Save conversations
+        self._save_conversations()
         
-        # Update stats
-        self.stats["messages_sent"] += 1
-        self.stats["messages_by_type"][message_type_value] = self.stats["messages_by_type"].get(message_type_value, 0) + 1
-        self.stats["messages_by_model"][from_model_value] = self.stats["messages_by_model"].get(from_model_value, 0) + 1
-        
-        # If directed message, add to recipient's queue
-        if to_model_value and to_model_value in self.message_queues:
-            self.message_queues[to_model_value].put(message)
-        
-        logger.info(f"Message added to conversation {conversation_id}: {message_id}")
-        
-        return message
-    
-    def get_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
-        """Get a conversation by ID"""
-        conversation = self.conversations.get(conversation_id)
-        
-        if conversation:
-            # Make a copy with messages sorted by timestamp
-            result = conversation.copy()
-            result["messages"] = sorted(result["messages"], key=lambda m: m["timestamp"])
-            return result
-        
-        return None
+        logger.info(f"Sent message from {from_id} to {to_id or 'all'} in conversation {conversation_id}")
+        return True
     
     def get_messages(
         self,
         conversation_id: str,
-        from_model: Union[ModelType, str, None] = None,
-        to_model: Union[ModelType, str, None] = None,
-        message_type: Union[MessageType, str, None] = None,
-        limit: Optional[int] = None
+        for_model: ModelType,
+        decrypt: bool = True,
+        message_types: List[str] = None,
+        from_model: ModelType = None,
+        limit: int = None
     ) -> List[Dict[str, Any]]:
         """
         Get messages from a conversation
         
         Args:
-            conversation_id: Conversation ID
-            from_model: Filter by source model
-            to_model: Filter by target model
-            message_type: Filter by message type
+            conversation_id: ID of the conversation
+            for_model: Model retrieving the messages
+            decrypt: Whether to decrypt encrypted messages
+            message_types: Filter by message types
+            from_model: Filter by sender
             limit: Maximum number of messages to return
             
         Returns:
-            Filtered messages
+            List of messages
         """
-        # Check if conversation exists
         if conversation_id not in self.conversations:
             logger.error(f"Conversation not found: {conversation_id}")
             return []
         
-        # Get conversation
         conversation = self.conversations[conversation_id]
-        
-        # Convert model types to string if needed
-        from_model_value = from_model.value if isinstance(from_model, ModelType) else from_model
-        to_model_value = to_model.value if isinstance(to_model, ModelType) else to_model
-        
-        # Convert message type to string if needed
-        message_type_value = message_type.value if isinstance(message_type, MessageType) else message_type
-        
-        # Filter messages
         messages = conversation["messages"]
         
-        if from_model_value:
-            messages = [m for m in messages if m["from"] == from_model_value]
+        # Filter messages
+        filtered_messages = []
+        for message in messages:
+            # Filter by recipient
+            to_model = message.get("to_model")
+            if to_model and to_model != for_model.value:
+                continue
+            
+            # Filter by message type
+            if message_types and message.get("message_type") not in message_types:
+                continue
+            
+            # Filter by sender
+            if from_model and message.get("from_model") != from_model.value:
+                continue
+            
+            # Clone the message to avoid modifying the original
+            filtered_message = message.copy()
+            
+            # Decrypt content if needed
+            if decrypt and message.get("encrypted", False):
+                content = message.get("content", "")
+                filtered_message["content"] = decrypt_message(content, for_model.value)
+            
+            filtered_messages.append(filtered_message)
         
-        if to_model_value:
-            messages = [m for m in messages if m["to"] == to_model_value]
+        # Apply limit if specified
+        if limit is not None:
+            filtered_messages = filtered_messages[-limit:]
         
-        if message_type_value:
-            messages = [m for m in messages if m["type"] == message_type_value]
-        
-        # Sort by timestamp
-        messages = sorted(messages, key=lambda m: m["timestamp"])
-        
-        # Apply limit
-        if limit and limit > 0:
-            messages = messages[-limit:]
-        
-        return messages
+        return filtered_messages
     
-    def ask_question(
+    def share_knowledge(
         self,
-        from_model: Union[ModelType, str],
-        to_model: Union[ModelType, str],
-        content: str,
-        context: Dict[str, Any] = None,
-        conversation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+        conversation_id: str,
+        from_model: ModelType,
+        to_model: Optional[ModelType] = None,
+        content: str = "",
+        source_reference: str = "",
+        categories: List[str] = None,
+        add_to_library: bool = True
+    ) -> bool:
         """
-        Ask a question from one model to another
+        Share knowledge between models
         
         Args:
-            from_model: Source model
-            to_model: Target model
-            content: Question content
-            context: Additional context
-            conversation_id: Existing conversation ID
+            conversation_id: ID of the conversation
+            from_model: Model sharing the knowledge
+            to_model: Model to share with (None for all)
+            content: Knowledge content
+            source_reference: Reference to the source
+            categories: Knowledge categories
+            add_to_library: Whether to add to the knowledge library
             
         Returns:
-            Question message
+            Success status
         """
-        # Convert model types to string if needed
-        from_model_value = from_model.value if isinstance(from_model, ModelType) else from_model
-        to_model_value = to_model.value if isinstance(to_model, ModelType) else to_model
+        if not has_knowledge_lib:
+            logger.warning("Knowledge library not available. Knowledge sharing disabled.")
+            return False
         
-        # Validate models
-        if from_model_value not in self.participants or not self.participants[from_model_value]:
-            logger.error(f"Source model not available: {from_model_value}")
-            return {"error": f"Source model not available: {from_model_value}"}
-        
-        if to_model_value not in self.participants or not self.participants[to_model_value]:
-            logger.error(f"Target model not available: {to_model_value}")
-            return {"error": f"Target model not available: {to_model_value}"}
-        
-        # Create or get conversation
-        if conversation_id and conversation_id in self.conversations:
-            # Check if models are participants
-            conversation = self.conversations[conversation_id]
-            if from_model_value not in conversation["participants"]:
-                conversation["participants"].append(from_model_value)
-            if to_model_value not in conversation["participants"]:
-                conversation["participants"].append(to_model_value)
-        else:
-            # Create new conversation
-            conversation_id = self.create_conversation(
-                topic=f"Question from {from_model_value} to {to_model_value}",
-                participants=[from_model_value, to_model_value],
-                context=context
+        # Add to knowledge library if requested
+        entry_id = None
+        if add_to_library:
+            entry_id = knowledge_library.add_knowledge_entry(
+                content=content,
+                source_type=KnowledgeSource.CONVERSATION,
+                source_reference=source_reference or f"conversation:{conversation_id}",
+                categories=categories or ["shared_knowledge"],
+                created_by=from_model.value,
+                metadata={
+                    "conversation_id": conversation_id,
+                    "shared_at": datetime.datetime.now().isoformat(),
+                    "shared_with": to_model.value if to_model else "all"
+                }
             )
         
-        # Add question message
-        message = self.add_message(
-            conversation_id=conversation_id,
-            from_model=from_model_value,
-            to_model=to_model_value,
-            message_type=MessageType.QUESTION.value,
-            content=content,
-            metadata={
-                "context": context or {}
-            }
-        )
+        # Prepare knowledge message
+        message_content = {
+            "knowledge_content": content,
+            "source_reference": source_reference,
+            "categories": categories or ["shared_knowledge"],
+            "entry_id": entry_id,
+            "shared_at": datetime.datetime.now().isoformat()
+        }
         
-        # In a real implementation, this would trigger the model to generate a response
-        # For simulation, we'll add a system placeholder message
-        answer = self.add_message(
+        # Send as knowledge message
+        return self.send_message(
             conversation_id=conversation_id,
-            from_model=to_model_value,
-            to_model=from_model_value,
-            message_type=MessageType.ANSWER.value,
-            content=f"This is a simulated response from {to_model_value} to the question: {content[:50]}...",
-            metadata={
-                "simulated": True
-            }
+            from_model=from_model,
+            to_model=to_model,
+            message_type=MessageType.KNOWLEDGE,
+            content=json.dumps(message_content),
+            encrypted=True
         )
-        
-        return message
     
-    def send_suggestion(
+    def request_help(
         self,
-        from_model: Union[ModelType, str],
-        to_model: Union[ModelType, str],
-        content: str,
-        context: Dict[str, Any] = None,
-        conversation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+        conversation_id: str,
+        from_model: ModelType,
+        to_model: ModelType,
+        query: str,
+        context: Dict[str, Any] = None
+    ) -> bool:
         """
-        Send a suggestion from one model to another
+        Request help from another model
         
         Args:
-            from_model: Source model
-            to_model: Target model
-            content: Suggestion content
+            conversation_id: ID of the conversation
+            from_model: Model requesting help
+            to_model: Model to request help from
+            query: Help query
             context: Additional context
-            conversation_id: Existing conversation ID
             
         Returns:
-            Suggestion message
+            Success status
         """
-        # Convert model types to string if needed
-        from_model_value = from_model.value if isinstance(from_model, ModelType) else from_model
-        to_model_value = to_model.value if isinstance(to_model, ModelType) else to_model
+        # Prepare help request
+        request_content = {
+            "query": query,
+            "context": context or {},
+            "requested_at": datetime.datetime.now().isoformat()
+        }
         
-        # Validate models
-        if from_model_value not in self.participants or not self.participants[from_model_value]:
-            logger.error(f"Source model not available: {from_model_value}")
-            return {"error": f"Source model not available: {from_model_value}"}
-        
-        if to_model_value not in self.participants or not self.participants[to_model_value]:
-            logger.error(f"Target model not available: {to_model_value}")
-            return {"error": f"Target model not available: {to_model_value}"}
-        
-        # Create or get conversation
-        if conversation_id and conversation_id in self.conversations:
-            # Check if models are participants
-            conversation = self.conversations[conversation_id]
-            if from_model_value not in conversation["participants"]:
-                conversation["participants"].append(from_model_value)
-            if to_model_value not in conversation["participants"]:
-                conversation["participants"].append(to_model_value)
-        else:
-            # Create new conversation
-            conversation_id = self.create_conversation(
-                topic=f"Suggestion from {from_model_value} to {to_model_value}",
-                participants=[from_model_value, to_model_value],
-                context=context
-            )
-        
-        # Add suggestion message
-        message = self.add_message(
+        # Send as help request
+        return self.send_message(
             conversation_id=conversation_id,
-            from_model=from_model_value,
-            to_model=to_model_value,
-            message_type=MessageType.SUGGESTION.value,
-            content=content,
-            metadata={
-                "context": context or {}
-            }
+            from_model=from_model,
+            to_model=to_model,
+            message_type=MessageType.REQUEST_HELP,
+            content=json.dumps(request_content),
+            encrypted=True
         )
-        
-        return message
     
-    def send_critique(
+    def provide_help(
         self,
-        from_model: Union[ModelType, str],
-        to_model: Union[ModelType, str],
-        content: str,
-        target_message_id: Optional[str] = None,
-        context: Dict[str, Any] = None,
-        conversation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+        conversation_id: str,
+        from_model: ModelType,
+        to_model: ModelType,
+        request_id: str,
+        response: str,
+        knowledge_refs: List[str] = None
+    ) -> bool:
         """
-        Send a critique from one model to another
+        Provide help to another model
         
         Args:
-            from_model: Source model
-            to_model: Target model
-            content: Critique content
-            target_message_id: ID of the message being critiqued
-            context: Additional context
-            conversation_id: Existing conversation ID
+            conversation_id: ID of the conversation
+            from_model: Model providing help
+            to_model: Model to help
+            request_id: ID of the help request message
+            response: Help response
+            knowledge_refs: References to knowledge entries
             
         Returns:
-            Critique message
+            Success status
         """
-        # Convert model types to string if needed
-        from_model_value = from_model.value if isinstance(from_model, ModelType) else from_model
-        to_model_value = to_model.value if isinstance(to_model, ModelType) else to_model
+        # Prepare help response
+        response_content = {
+            "request_id": request_id,
+            "response": response,
+            "knowledge_refs": knowledge_refs or [],
+            "provided_at": datetime.datetime.now().isoformat()
+        }
         
-        # Validate models
-        if from_model_value not in self.participants or not self.participants[from_model_value]:
-            logger.error(f"Source model not available: {from_model_value}")
-            return {"error": f"Source model not available: {from_model_value}"}
-        
-        if to_model_value not in self.participants or not self.participants[to_model_value]:
-            logger.error(f"Target model not available: {to_model_value}")
-            return {"error": f"Target model not available: {to_model_value}"}
-        
-        # Create or get conversation
-        if conversation_id and conversation_id in self.conversations:
-            # Check if models are participants
-            conversation = self.conversations[conversation_id]
-            if from_model_value not in conversation["participants"]:
-                conversation["participants"].append(from_model_value)
-            if to_model_value not in conversation["participants"]:
-                conversation["participants"].append(to_model_value)
-        else:
-            # Create new conversation
-            conversation_id = self.create_conversation(
-                topic=f"Critique from {from_model_value} to {to_model_value}",
-                participants=[from_model_value, to_model_value],
-                context=context
-            )
-        
-        # Add critique message
-        message = self.add_message(
+        # Send as help response
+        return self.send_message(
             conversation_id=conversation_id,
-            from_model=from_model_value,
-            to_model=to_model_value,
-            message_type=MessageType.CRITIQUE.value,
-            content=content,
-            metadata={
-                "target_message_id": target_message_id,
-                "context": context or {}
-            }
+            from_model=from_model,
+            to_model=to_model,
+            message_type=MessageType.PROVIDE_HELP,
+            content=json.dumps(response_content),
+            encrypted=True
         )
-        
-        return message
     
-    def collaborate(
+    def collaborative_response(
         self,
-        task: str,
-        models: List[Union[ModelType, str]],
-        mode: Union[CollaborationMode, str] = CollaborationMode.COLLABORATIVE,
+        query: str,
+        models: List[ModelType],
         context: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """
-        Initiate collaborative work between models
+        Generate a collaborative response from multiple models
         
         Args:
-            task: Task description
-            models: Models to involve in collaboration
-            mode: Collaboration mode
+            query: User query
+            models: List of models to collaborate
             context: Additional context
             
         Returns:
-            Collaboration setup information
+            Collaborative response
         """
-        # Convert model types to string if needed
-        model_values = []
-        for model in models:
-            if isinstance(model, ModelType):
-                model_values.append(model.value)
-            else:
-                # Validate model
-                try:
-                    ModelType(model)
-                    model_values.append(model)
-                except ValueError:
-                    logger.warning(f"Invalid model type: {model}")
+        if len(models) < 2:
+            logger.warning("Collaborative response requires at least 2 models")
+            return {"error": "Not enough models for collaboration"}
         
-        # Convert mode to string if needed
-        mode_value = mode.value if isinstance(mode, CollaborationMode) else mode
-        
-        # Validate mode
-        try:
-            collaboration_mode = CollaborationMode(mode_value)
-        except ValueError:
-            logger.error(f"Invalid collaboration mode: {mode_value}")
-            return {"error": f"Invalid collaboration mode: {mode_value}"}
-        
-        # Set current collaboration mode
-        self.collaboration_mode = collaboration_mode
-        
-        # Create a conversation for the collaboration
+        # Create conversation
         conversation_id = self.create_conversation(
-            topic=f"Collaboration: {task}",
-            participants=model_values + [ModelType.SYSTEM.value],
-            context=context
+            topic=f"Collaborative: {query[:50]}...",
+            mode=CommunicationMode.COLLABORATIVE
         )
         
-        # Add system message about the collaboration
-        self.add_message(
-            conversation_id=conversation_id,
-            from_model=ModelType.SYSTEM.value,
-            message_type=MessageType.SYSTEM.value,
-            content=f"Collaboration started in {mode_value} mode: {task}",
-            metadata={
-                "task": task,
-                "mode": mode_value,
-                "participants": model_values
-            }
-        )
+        # Add participants
+        for model in models:
+            self.add_participant(conversation_id, model)
         
-        # Add task assignment message
-        if mode_value == CollaborationMode.COLLABORATIVE.value:
-            # All models work on the same task
-            message = f"All models should collaborate on the task: {task}"
-        
-        elif mode_value == CollaborationMode.SPECIALIZED.value:
-            # Split the task based on specialization
-            message = f"Task will be divided based on specialization: {task}"
-            
-            # Example specialization
-            for model in model_values:
-                if model == ModelType.QWEN.value:
-                    self.add_message(
-                        conversation_id=conversation_id,
-                        from_model=ModelType.SYSTEM.value,
-                        to_model=model,
-                        message_type=MessageType.SYSTEM.value,
-                        content=f"Your specialization: Planning and architecture for {task}"
-                    )
-                elif model == ModelType.OLYMPIC.value:
-                    self.add_message(
-                        conversation_id=conversation_id,
-                        from_model=ModelType.SYSTEM.value,
-                        to_model=model,
-                        message_type=MessageType.SYSTEM.value,
-                        content=f"Your specialization: Implementation and testing for {task}"
-                    )
-        
-        elif mode_value == CollaborationMode.COMPETITIVE.value:
-            # Models compete
-            message = f"All models should compete to provide the best solution for: {task}"
-        
-        # Add the mode-specific system message
-        self.add_message(
-            conversation_id=conversation_id,
-            from_model=ModelType.SYSTEM.value,
-            message_type=MessageType.SYSTEM.value,
-            content=message
-        )
-        
-        # Return collaboration information
-        return {
+        # Prepare response
+        response = {
             "conversation_id": conversation_id,
-            "mode": mode_value,
-            "participants": model_values,
-            "task": task
+            "query": query,
+            "mode": CommunicationMode.COLLABORATIVE,
+            "models": [model.value for model in models],
+            "responses": {},
+            "combined_response": "",
+            "knowledge_used": []
         }
+        
+        # This is a stub method - in real implementation, would:
+        # 1. Get individual responses from each model
+        # 2. Share knowledge between models
+        # 3. Have models collaborate to refine the response
+        # 4. Combine responses into a final answer
+        
+        return response
     
-    def get_status(self) -> Dict[str, Any]:
-        """Get the status of the communication system"""
-        total_messages = self.stats["messages_sent"]
+    def export_shared_knowledge(
+        self,
+        model_id: str,
+        output_file: str,
+        format: str = "plain_text"
+    ) -> bool:
+        """
+        Export knowledge shared by a specific model
         
-        # Calculate average response time
-        avg_response_time = 0
-        if "ANSWER" in self.stats["messages_by_type"] and self.stats["messages_by_type"]["ANSWER"] > 0:
-            # In a real implementation, this would be calculated from actual response times
-            # Here we just use a placeholder
-            avg_response_time = 1.5  # seconds
+        Args:
+            model_id: ID of the model
+            output_file: Path to output file
+            format: Output format ("plain_text" or "json")
+            
+        Returns:
+            Success status
+        """
+        if not has_knowledge_lib:
+            logger.warning("Knowledge library not available. Export disabled.")
+            return False
         
-        return {
-            "operational": True,
-            "models": {
-                model: {"active": active}
-                for model, active in self.participants.items()
-            },
-            "collaboration_mode": self.collaboration_mode.value,
-            "conversations": len(self.conversations),
-            "stats": {
-                "total_messages": total_messages,
-                "messages_by_type": self.stats["messages_by_type"],
-                "messages_by_model": self.stats["messages_by_model"],
-                "average_response_time": avg_response_time
-            }
-        }
+        # Get entries created by the model
+        entries = knowledge_library.get_entries_by_model(model_id)
+        
+        if not entries:
+            logger.warning(f"No knowledge entries found for model {model_id}")
+            return False
+        
+        # Export in requested format
+        if format.lower() == "json":
+            return knowledge_library.export_entries_to_json(entries, output_file)
+        else:
+            return knowledge_library.export_entries_to_plain_text(entries, output_file)
+    
+    def search_shared_knowledge(
+        self,
+        query: str,
+        model_id: str = None,
+        categories: List[str] = None,
+        limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """
+        Search knowledge shared by models
+        
+        Args:
+            query: Search query
+            model_id: Filter by model that created the knowledge
+            categories: Filter by categories
+            limit: Maximum number of results
+            
+        Returns:
+            List of matching knowledge entries
+        """
+        if not has_knowledge_lib:
+            logger.warning("Knowledge library not available. Search disabled.")
+            return []
+        
+        # Search knowledge
+        entries = knowledge_library.search_knowledge(query, limit=limit, categories=categories)
+        
+        # Filter by model if specified
+        if model_id:
+            entries = [entry for entry in entries if entry.created_by == model_id]
+        
+        # Convert to dicts for return
+        results = []
+        for entry in entries:
+            results.append({
+                "id": entry.id,
+                "content": entry.content,
+                "source_type": entry.source_type,
+                "source_reference": entry.source_reference,
+                "categories": entry.categories,
+                "created_by": entry.created_by,
+                "metadata": entry.metadata
+            })
+        
+        return results
 
 # Initialize communication system
 communication_system = CommunicationSystem()

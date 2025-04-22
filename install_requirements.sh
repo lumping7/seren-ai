@@ -1,28 +1,30 @@
 #!/bin/bash
-# Script to install required packages for Seren AI system
 
-echo "Installing required packages for Seren AI system..."
+# Install requirements for Seren AI System
+echo "Installing requirements for Seren AI System..."
 
-# Core ML packages
-pip install transformers torch accelerate --extra-index-url https://download.pytorch.org/whl/cpu
+# Check Python version
+python_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+echo "Detected Python version: $python_version"
 
-# Model handling
-pip install bitsandbytes sentencepiece protobuf ctransformers huggingface-hub einops
+# Basic requirements
+pip install -q fastapi uvicorn pydantic numpy requests beautifulsoup4 nltk
 
-# Utilities
-pip install scipy tqdm safetensors numpy pandas requests tenacity
+# For vector embeddings
+pip install -q faiss-cpu
 
-# API and backend
-pip install fastapi uvicorn pydantic python-dotenv httpx aiohttp websockets
+# For machine learning and model hosting
+pip install -q torch transformers
 
-# Memory and storage
-pip install faiss-cpu chromadb 
+# For knowledge library functionality
+pip install -q scikit-learn pdf2image pytesseract rouge-score
 
-# Security
-pip install cryptography pyjwt pyotp 
+# For security
+pip install -q cryptography pyca
 
-# System utilities
-pip install psutil loguru
+# Download NLTK data
+python3 -c "import nltk; nltk.download('punkt', quiet=True)"
 
-echo "Done installing required packages."
-echo "To download models, run: python -m ai_core.model_downloader"
+echo "Installation complete!"
+echo "To download the required models, run:"
+echo "python -m ai_core.model_downloader --model all --quantized"

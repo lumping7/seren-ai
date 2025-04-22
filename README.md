@@ -1,89 +1,128 @@
-# Seren: Hyperintelligent AI Dev Team
+# Seren AI System
 
-Seren is a bleeding-edge hybrid AI system that integrates Qwen2.5-omni-7b and OlympicCoder-7B models with advanced neuro-symbolic reasoning capabilities, designed for intelligent and adaptive software development.
+Seren is a cutting-edge hybrid AI development platform pioneering autonomous, adaptive, and secure intelligent system creation.
 
-## Overview
+## Core Features
 
-Seren represents the future of AI-driven development, functioning as a hyperintelligent dev team where two specialized models work together as architects and builders. Operating in a sandbox environment with a plan-optimize-verify workflow, the system delivers production-ready software from simple prompts.
+- **Multi-model AI architecture** - Leverages Qwen2.5-omni-7b and OlympicCoder-7B models
+- **Advanced collaboration modes** - Collaborative, specialized, and competitive model interactions
+- **Offline operation** - Fully locally hosted models for privacy and reliability
+- **Quantum-enhanced security** - Secure inter-model communications
+- **Modular neuro-symbolic reasoning engine** - For enhanced AI reasoning capabilities
 
-### Key Components
+## System Architecture
 
-- **Hybrid AI Model Architecture**: Combines Qwen2.5-omni-7b and OlympicCoder-7B models for a powerful, complementary system
-- **Advanced Neuro-Symbolic Reasoning Engine**: Enhances solutions with formal logic, causal reasoning, and symbolic manipulation
-- **Model Communication System**: Allows models to question each other when stuck, fostering collaborative problem-solving
-- **Self-Improvement Mechanisms**: Includes autonomous training with federated learning and extension capabilities
-- **Memory Management**: Incorporates episodic, semantic, and procedural memory systems
-- **Quantum-Resistant Security**: Features post-quantum cryptography for secure communication
+Seren is built with a modular architecture:
 
-## Architecture
+### AI Core
+- **AI Engine** - Core orchestration of AI models and capabilities
+- **Model Manager** - Loads and manages local AI models
+- **Model Downloader** - Downloads required models from Hugging Face Hub
+- **Model Communication** - Enables secure inter-model communication
+- **API Server** - HTTP API access to AI capabilities
 
-The system is structured with these main components:
-
-```
-├── ai_core/            # Core AI components
-│   ├── server.py       # Main server interface
-│   ├── ai_engine.py    # Core AI engine
-│   ├── neurosymbolic_reasoning.py  # Reasoning capabilities
-│   ├── ai_memory.py    # Memory management
-│   ├── ai_execution.py # Code execution
-│   ├── ai_autonomy.py  # Autonomous decision making
-│   ├── model_communication.py  # Model communication
-│   └── api.py          # API interface
-├── ai_evolution/       # Self-improvement capabilities
-│   ├── ai_upgrader.py  # System upgrading
-│   ├── ai_extension_manager.py  # Extension management
-│   ├── ai_auto_training.py  # Autonomous training
-│   └── model_creator.py  # Specialized model creation
-└── security/           # Security components
-    └── quantum_encryption.py  # Quantum-resistant encryption
-```
-
-## Collaboration Modes
-
-Seren supports three distinct modes of operation:
-
-1. **Collaborative Mode**: Models work together, sharing insights and reasoning steps
-2. **Specialized Mode**: Models focus on their respective strengths (architecture vs. implementation)
-3. **Competitive Mode**: Models independently develop solutions, which are then compared and merged
-
-## Technologies
-
-- **AI Foundation**: Python-based infrastructure with support for multiple model backends
-- **Reasoning**: Neuro-symbolic integration combining neural networks with symbolic logic
-- **Execution**: Sandboxed environment for secure code execution and testing
-- **API**: FastAPI interface for programmatic access to all capabilities
-- **Security**: Post-quantum cryptographic algorithms for future-proof security
+### Security
+- **Quantum Encryption** - Simulated quantum-secure communications
+- **Authentication** - API key-based access control
 
 ## Getting Started
 
-To run the Seren system locally:
+### Prerequisites
+- Python 3.8+ with required packages (see `install_requirements.sh`)
+- ~30GB disk space for full models (or ~8GB for quantized models)
+- 16GB+ RAM (32GB+ recommended)
+- GPU with 8GB+ VRAM (optional but recommended)
 
-1. Ensure Python 3.10+ is installed
-2. Install required packages:
+### Installation
+
+1. Clone the repository
+2. Run the installation script:
+   ```bash
+   chmod +x install_requirements.sh
+   ./install_requirements.sh
    ```
-   pip install fastapi uvicorn pydantic
+3. Download the required models:
+   ```bash
+   python -m ai_core.model_downloader --model all --quantized
    ```
-3. Start the server:
-   ```
-   python ai_core/api.py
-   ```
-4. Access the API at `http://127.0.0.1:8000`
+   For full-precision models, omit the `--quantized` flag.
 
-## API Documentation
+### Running the Server
 
-The Seren API provides endpoints for:
+Start the central server:
+```bash
+python -m ai_core.server
+```
 
-- `/api/query` - Main query interface
-- `/api/communication` - Model-to-model communication
-- `/api/reasoning` - Direct access to neuro-symbolic reasoning
-- `/api/execute` - Code execution
-- `/api/memory` - Memory system queries
-- `/api/models/create` - Creation of specialized models
-- `/api/extensions` - Extension management
-- `/api/training` - Training management
+By default, this will start:
+- HTTP API server on http://localhost:8000
+- WebSocket server on port 8001 (when implemented)
 
-API documentation is available at `/docs` when the server is running.
+## API Usage
+
+The HTTP API provides the following endpoints:
+
+- **`GET /health`** - Health check
+- **`GET /api/status`** - System status
+- **`POST /api/query`** - Process general queries
+- **`POST /api/code/generate`** - Generate code
+- **`POST /api/code/analyze`** - Analyze code
+- **`POST /api/code/explain`** - Explain code
+- **`POST /api/collaborative`** - Generate collaborative responses
+- **`POST /api/specialized`** - Generate specialized responses
+- **`POST /api/competitive`** - Generate competitive responses
+
+Authentication is done via API key in the Authorization header:
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+The default API key is `dev-key` for development.
+
+## Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       Seren AI System                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐│
+│  │               │    │               │    │               ││
+│  │  HTTP API     │    │  WebSocket    │    │  CLI          ││
+│  │  Server       │    │  Server       │    │  Interface    ││
+│  │               │    │               │    │               ││
+│  └───────┬───────┘    └───────┬───────┘    └───────┬───────┘│
+│          │                    │                    │        │
+│          └──────────┬─────────┴──────────┬─────────┘        │
+│                     │                    │                  │
+│             ┌───────▼────────────────────▼───────┐          │
+│             │                                    │          │
+│             │            AI Engine               │          │
+│             │                                    │          │
+│             └───────┬────────────────────┬───────┘          │
+│                     │                    │                  │
+│        ┌────────────▼───────┐    ┌───────▼────────────┐     │
+│        │                    │    │                    │     │
+│        │   Model Manager    │    │  Communication     │     │
+│        │                    │    │  System            │     │
+│        └────────┬───────────┘    └────────┬───────────┘     │
+│                 │                          │                 │
+│        ┌────────▼───────────┐    ┌────────▼───────────┐     │
+│        │                    │    │                    │     │
+│        │   Qwen2.5-omni-7b  │    │  Quantum           │     │
+│        │   OlympicCoder-7B  │    │  Encryption        │     │
+│        │                    │    │                    │     │
+│        └────────────────────┘    └────────────────────┘     │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ## License
 
-All rights reserved. This software is proprietary and confidential.
+This project is proprietary and confidential. © 2025 Seren AI, All Rights Reserved.
+
+## Acknowledgements
+
+- The Qwen team for the Qwen2.5-omni-7b model
+- The OlympicCoder-7B team for their specialized code model
+- Hugging Face for hosting the models
