@@ -88,33 +88,21 @@ export async function hybridHandler(req: Request, res: Response) {
       }
     }
     
-    // Make a deep clone of the request for each model call
-    // This allows us to track separate models
-    const llamaReq = JSON.parse(JSON.stringify(req));
-    const gemmaReq = JSON.parse(JSON.stringify(req));
+    // Setup prompts and options for each model
+    // These specialized prompts give each model a distinct role
+    const llamaPrompt = `[SYSTEM: You are the architecture expert in a collaborative AI team. Your role is to design systems, plan implementation details, and provide technical specifications. Focus on architecture, design patterns, and technical accuracy.]\n\n${prompt}`;
     
-    // Create synthetic response objects for each model
-    // In production, these would be actual HTTP responses
-    const llamaRes = createSyntheticResponseObject();
-    const gemmaRes = createSyntheticResponseObject();
+    const gemmaPrompt = `[SYSTEM: You are the creative implementation expert in a collaborative AI team. Your role is to implement systems designed by the architecture expert, add creative solutions, and ensure the final product is user-friendly. Focus on practical implementation, edge cases, and user experience.]\n\n${prompt}`;
     
-    // Set request bodies for each model with appropriate context
-    llamaReq.body = {
-      prompt: `[SYSTEM: You are the architecture expert in a collaborative AI team. Your role is to design systems, plan implementation details, and provide technical specifications. Focus on architecture, design patterns, and technical accuracy.]\n\n${prompt}`,
-      options: {
-        ...options,
-        temperature: Math.min(options.temperature * 0.9, 1.0), // Slightly lower temperature for more precise logic
-      },
-      includeModelDetails: false
+    // Adjust options for each model based on their strengths
+    const llamaOptions = {
+      ...options,
+      temperature: Math.min(options.temperature * 0.9, 1.0) // Slightly lower temperature for more precise logic
     };
     
-    gemmaReq.body = {
-      prompt: `[SYSTEM: You are the creative implementation expert in a collaborative AI team. Your role is to implement systems designed by the architecture expert, add creative solutions, and ensure the final product is user-friendly. Focus on practical implementation, edge cases, and user experience.]\n\n${prompt}`,
-      options: {
-        ...options,
-        temperature: Math.min(options.temperature * 1.1, 1.5), // Slightly higher temperature for more creative outputs
-      },
-      includeModelDetails: false
+    const gemmaOptions = {
+      ...options,
+      temperature: Math.min(options.temperature * 1.1, 1.5) // Slightly higher temperature for more creative outputs
     };
     
     // Determine processing mode based on options
@@ -132,8 +120,8 @@ export async function hybridHandler(req: Request, res: Response) {
       case 'collaborative':
         // Make parallel calls to both models
         const [llamaResult, gemmaResult] = await Promise.all([
-          callModelHandler(llamaHandler, llamaReq, llamaRes),
-          callModelHandler(gemmaHandler, gemmaReq, gemmaRes)
+          callModelHandler(llamaHandler, 'llama3', llamaPrompt, llamaOptions),
+          callModelHandler(gemmaHandler, 'gemma3', gemmaPrompt, gemmaOptions)
         ]);
         
         // Combine the responses using the collaborative approach
@@ -149,14 +137,14 @@ export async function hybridHandler(req: Request, res: Response) {
         // Choose model based on prompt content
         if (isArchitecturalTask(prompt)) {
           // For architecture/logical tasks, prefer Llama3
-          const llamaResult = await callModelHandler(llamaHandler, llamaReq, llamaRes);
+          const llamaResult = await callModelHandler(llamaHandler, 'llama3', llamaPrompt, llamaOptions);
           result = llamaResult.generated_text;
           collaborativeData.llama3_contribution = 0.9;
           collaborativeData.gemma3_contribution = 0.1;
           collaborativeData.reasoning_steps.push('Detected architectural task, prioritized Llama3');
         } else {
           // For creative/implementation tasks, prefer Gemma3
-          const gemmaResult = await callModelHandler(gemmaHandler, gemmaReq, gemmaRes);
+          const gemmaResult = await callModelHandler(gemmaHandler, 'gemma3', gemmaPrompt, gemmaOptions);
           result = gemmaResult.generated_text;
           collaborativeData.llama3_contribution = 0.1;
           collaborativeData.gemma3_contribution = 0.9;
@@ -167,8 +155,8 @@ export async function hybridHandler(req: Request, res: Response) {
       case 'competitive':
         // Make parallel calls to both models
         const [llamaCompResult, gemmaCompResult] = await Promise.all([
-          callModelHandler(llamaHandler, llamaReq, llamaRes),
-          callModelHandler(gemmaHandler, gemmaReq, gemmaRes)
+          callModelHandler(llamaHandler, 'llama3', llamaPrompt, llamaOptions),
+          callModelHandler(gemmaHandler, 'gemma3', gemmaPrompt, gemmaOptions)
         ]);
         
         // Choose the best response based on quality metrics
@@ -243,37 +231,61 @@ export async function hybridHandler(req: Request, res: Response) {
   }
 }
 
-/**
- * A mock response object to collect response data from model handlers
- */
-function createSyntheticResponseObject() {
-  let responseData: any = null;
-  
-  return {
-    json: (data: any) => {
-      responseData = data;
-      return responseData;
-    },
-    status: (code: number) => ({
-      json: (data: any) => {
-        responseData = { ...data, status_code: code };
-        return responseData;
-      }
-    }),
-    getData: () => responseData
-  };
-}
+// Function removed - no longer needed
 
 /**
- * Call a model handler with the given request and response objects
+ * Call a model without passing the actual req/res objects to avoid circular JSON
  */
 async function callModelHandler(
   handler: Function, 
-  req: any, 
-  res: any
+  modelType: 'llama3' | 'gemma3',
+  prompt: string,
+  options: any = {}
 ): Promise<any> {
-  await handler(req, res);
-  return res.getData();
+  // Create mock req/res objects to avoid circular references
+  const mockReq = {
+    body: {
+      prompt,
+      options,
+      includeModelDetails: false
+    },
+    isAuthenticated: () => false // No need to store for internal calls
+  };
+  
+  // Create a synthetic response object
+  const mockRes = {
+    _status: 200,
+    _data: null,
+    status: function(code: number) {
+      this._status = code;
+      return this;
+    },
+    json: function(data: any) {
+      this._data = data;
+      return this;
+    },
+    getData: function() {
+      return this._data;
+    }
+  };
+  
+  try {
+    // Call the handler with our mock objects
+    await handler(mockReq, mockRes);
+    
+    // Return the captured data
+    return mockRes.getData();
+  } catch (error: any) {
+    console.error(`[Hybrid] Error calling ${modelType} model:`, error.message || 'Unknown error');
+    return {
+      model: modelType,
+      generated_text: `Error: Could not get response from ${modelType} model.`,
+      metadata: {
+        error: true,
+        error_message: error.message || 'Unknown error'
+      }
+    };
+  }
 }
 
 /**
@@ -296,8 +308,12 @@ async function combineCollaborativeResponses(
   
   // Log the contribution reasoning
   collaborativeData.reasoning_steps.push(
-    `Llama3 strength areas: ${llamaStrengths.areas.join(', ')}`,
-    `Gemma3 strength areas: ${gemmaStrengths.areas.join(', ')}`,
+    `Llama3 strength areas: ${llamaStrengths.areas.join(', ')}`
+  );
+  collaborativeData.reasoning_steps.push(
+    `Gemma3 strength areas: ${gemmaStrengths.areas.join(', ')}`
+  );
+  collaborativeData.reasoning_steps.push(
     `Contribution ratio - Llama3: ${(collaborativeData.llama3_contribution * 100).toFixed(1)}%, Gemma3: ${(collaborativeData.gemma3_contribution * 100).toFixed(1)}%`
   );
   
@@ -550,9 +566,15 @@ function selectBestResponse(
   const totalScore2 = (0.2 * length2/1000) + (0.4 * specificityScore2) + (0.4 * relevanceScore2);
   
   metrics.reasoning_steps.push(
-    `Llama3 scores - Length: ${(length1/1000).toFixed(2)}, Specificity: ${specificityScore1.toFixed(2)}, Relevance: ${relevanceScore1.toFixed(2)}`,
-    `Gemma3 scores - Length: ${(length2/1000).toFixed(2)}, Specificity: ${specificityScore2.toFixed(2)}, Relevance: ${relevanceScore2.toFixed(2)}`,
-    `Llama3 total score: ${totalScore1.toFixed(2)}`,
+    `Llama3 scores - Length: ${(length1/1000).toFixed(2)}, Specificity: ${specificityScore1.toFixed(2)}, Relevance: ${relevanceScore1.toFixed(2)}`
+  );
+  metrics.reasoning_steps.push(
+    `Gemma3 scores - Length: ${(length2/1000).toFixed(2)}, Specificity: ${specificityScore2.toFixed(2)}, Relevance: ${relevanceScore2.toFixed(2)}`
+  );
+  metrics.reasoning_steps.push(
+    `Llama3 total score: ${totalScore1.toFixed(2)}`
+  );
+  metrics.reasoning_steps.push(
     `Gemma3 total score: ${totalScore2.toFixed(2)}`
   );
   
