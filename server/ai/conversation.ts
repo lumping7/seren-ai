@@ -147,7 +147,7 @@ export class ConversationManager {
       }
       
       // Record performance
-      performanceMonitor.startOperation(`conversation_turn_${conversationId}`);
+      performanceMonitor.startOperation(`conversation_turn_${conversationId}_${conversation.turns.length + 1}`);
       
       // Generate response based on the model and conversation mode
       let content = '';
@@ -200,7 +200,7 @@ export class ConversationManager {
       conversation.turns.push(turn);
       
       // End performance tracking
-      performanceMonitor.endOperation(`conversation_turn_${conversationId}`);
+      performanceMonitor.endOperation(`conversation_turn_${conversationId}_${conversation.turns.length}`);
       
       // Check if we need to continue the conversation
       if (conversation.turns.length < this.maxTurns[conversation.mode]) {
@@ -224,7 +224,7 @@ export class ConversationManager {
       }
     } catch (error) {
       console.error('[ConversationManager] Error adding turn:', error);
-      performanceMonitor.endOperation(`conversation_turn_${conversationId}`, true);
+      performanceMonitor.endOperation(`conversation_turn_${conversationId}_${conversation.turns.length + 1}`, true);
     }
   }
   
