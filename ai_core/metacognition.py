@@ -16,45 +16,21 @@ from typing import Dict, List, Tuple, Set, Optional, Any, Union, Callable
 import copy
 import threading
 import uuid
-import random
 
 # Add parent directory to path for imports
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
-# Try to import required libraries
-try:
-    import numpy as np
-    has_numpy = True
-except ImportError:
-    has_numpy = False
-    logging.warning("NumPy not available. Some metacognitive capabilities may be limited.")
-
-try:
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-    has_torch = True
-except ImportError:
-    has_torch = False
-    logging.warning("PyTorch not available. Neural metacognition will be simulated.")
+# Import required libraries
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 # Local imports
-try:
-    from ai_core.neurosymbolic_reasoning import neurosymbolic_reasoning, ReasoningStrategy, Formula
-    has_reasoning = True
-except ImportError:
-    has_reasoning = False
-    logging.warning("Neurosymbolic reasoning not available. Metacognition will operate with limited reasoning.")
-
-# Try to import knowledge library
-try:
-    from ai_core.knowledge.library import knowledge_library, KnowledgeSource
-    has_knowledge_lib = True
-except ImportError:
-    has_knowledge_lib = False
-    logging.warning("Knowledge library not available. Metacognition will have limited knowledge access.")
+from ai_core.neurosymbolic_reasoning import neurosymbolic_reasoning, ReasoningStrategy, Formula
+from ai_core.knowledge.library import knowledge_library, KnowledgeSource
 
 # Configure logging
 logging.basicConfig(
@@ -1135,32 +1111,14 @@ class MetacognitiveSystem:
     
     def _monitor_cognitive_processes(self):
         """Monitor cognitive processes"""
-        # This would normally observe actual system behavior
-        # For demonstration, we'll create simulated observations
+        # Observe actual system behavior by analyzing active processes
+        operations = self._detect_active_operations()
         
-        # Sample active cognitive operations
-        operations = {}
+        # Determine metacognitive level based on system state
+        level = self._determine_metacognitive_level()
         
-        # Randomly choose 1-3 active operations
-        num_operations = random.randint(1, 3)
-        all_operations = list(CognitiveOperation)
-        active_ops = random.sample(all_operations, num_operations)
-        
-        for op in active_ops:
-            # Random intensity between 0.5 and 1.0
-            operations[op] = 0.5 + random.random() * 0.5
-        
-        # Determine metacognitive level
-        if random.random() < 0.2:  # 20% chance of metacognitive state
-            level = random.choice([
-                MetacognitiveLevel.META,
-                MetacognitiveLevel.SELF
-            ])
-        else:
-            level = MetacognitiveLevel.OBJECT
-        
-        # Simulated uncertainty
-        uncertainty = random.random() * 0.5  # Between 0 and 0.5
+        # Calculate uncertainty based on confidence scores
+        uncertainty = self._calculate_uncertainty()
         
         # Record the state
         self.cognitive_model.record_state(
@@ -1169,6 +1127,62 @@ class MetacognitiveSystem:
             uncertainty=uncertainty,
             cause="periodic_monitoring"
         )
+    
+    def _detect_active_operations(self) -> Dict[CognitiveOperation, float]:
+        """Detect which cognitive operations are currently active"""
+        operations = {}
+        
+        # Check memory access operations
+        if hasattr(self, 'last_memory_access') and time.time() - self.last_memory_access < 10:
+            operations[CognitiveOperation.REMEMBER] = 0.8
+        
+        # Check reasoning operations through neurosymbolic reasoning
+        if neurosymbolic_reasoning.is_reasoning_active():
+            operations[CognitiveOperation.REASON] = 0.9
+        
+        # Check learning operations
+        if hasattr(self, 'learning_cycle_active') and self.learning_cycle_active:
+            operations[CognitiveOperation.LEARN] = 0.9
+        
+        # Check reflection operations - always active during monitoring
+        operations[CognitiveOperation.REFLECT] = 0.7
+        operations[CognitiveOperation.MONITOR] = 0.9
+        
+        # If no operations detected, default to perception
+        if not operations:
+            operations[CognitiveOperation.PERCEIVE] = 0.6
+        
+        return operations
+    
+    def _determine_metacognitive_level(self) -> MetacognitiveLevel:
+        """Determine the current metacognitive level"""
+        # Check if we're in self-reflection mode
+        if hasattr(self, 'self_reflection_active') and self.self_reflection_active:
+            return MetacognitiveLevel.SELF
+        
+        # Check if we're analyzing our own thinking processes
+        if hasattr(self, 'analyzing_cognition') and self.analyzing_cognition:
+            return MetacognitiveLevel.META
+        
+        # Default to object level (thinking about external tasks)
+        return MetacognitiveLevel.OBJECT
+    
+    def _calculate_uncertainty(self) -> float:
+        """Calculate current uncertainty level"""
+        # Base uncertainty on confidence scores from reasoning system
+        if hasattr(neurosymbolic_reasoning, 'get_confidence_score'):
+            confidence = neurosymbolic_reasoning.get_confidence_score()
+            # Convert confidence to uncertainty (inverse relationship)
+            return max(0.0, min(1.0, 1.0 - confidence))
+        
+        # If no confidence scores available, check active tasks
+        if hasattr(self, 'active_tasks') and self.active_tasks:
+            # Average uncertainty of active tasks
+            task_uncertainties = [getattr(task, 'uncertainty', 0.5) for task in self.active_tasks]
+            return sum(task_uncertainties) / len(task_uncertainties)
+        
+        # Default moderate uncertainty
+        return 0.4
     
     def _process_metacognitive_tasks(self):
         """Process pending metacognitive tasks"""
