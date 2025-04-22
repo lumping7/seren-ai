@@ -50,6 +50,7 @@ class ModelType(Enum):
     QWEN = "qwen"           # Qwen2.5-omni-7b
     OLYMPIC = "olympic"     # OlympicCoder-7B
     HYBRID = "hybrid"       # Combined approach
+    SYSTEM = "system"       # System messages
 
 class ModelMode(Enum):
     """Operating modes for models"""
@@ -648,4 +649,197 @@ Return only the code with no explanations, using correct {language} syntax.
         }
 
 # Initialize model manager - the actual loading of models will happen on-demand
+class QwenModelInterface:
+    """Interface to the Qwen model for simplified usage"""
+    
+    def __init__(self, model, tokenizer):
+        """Initialize with loaded model and tokenizer"""
+        self.model = model
+        self.tokenizer = tokenizer
+        self.logger = logging.getLogger(__name__)
+    
+    def get_response(self, query: str, context: Dict[str, Any] = None) -> str:
+        """
+        Get a response from the Qwen model
+        
+        Args:
+            query: The query to answer
+            context: Additional context or parameters
+            
+        Returns:
+            Model's response as string
+        """
+        try:
+            # Prepare the query with or without context
+            if context and 'conversation_history' in context:
+                # Format with conversation history
+                history = context['conversation_history']
+                full_prompt = self._format_conversation(history, query)
+            else:
+                # Direct query
+                full_prompt = query
+            
+            # Generate response using the model
+            self.logger.info(f"Generating response with Qwen model")
+            inputs = self.tokenizer(full_prompt, return_tensors="pt")
+            if hasattr(self.model, "device") and self.model.device.type == "cuda":
+                inputs = {k: v.cuda() for k, v in inputs.items()}
+            
+            # Set generation parameters
+            generation_args = {
+                "max_new_tokens": context.get("max_tokens", 1024) if context else 1024,
+                "temperature": context.get("temperature", 0.7) if context else 0.7,
+                "top_p": context.get("top_p", 0.9) if context else 0.9,
+                "do_sample": True,
+                "num_return_sequences": 1
+            }
+            
+            # Generate response
+            outputs = self.model.generate(**inputs, **generation_args)
+            response_text = self.tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+            
+            return response_text.strip()
+        
+        except Exception as e:
+            error_msg = f"Error generating Qwen response: {str(e)}"
+            self.logger.error(error_msg)
+            return f"Error: {error_msg}"
+    
+    def _format_conversation(self, history: List[Dict[str, str]], current_query: str) -> str:
+        """Format a conversation history with the current query"""
+        formatted = ""
+        for entry in history:
+            if 'user' in entry:
+                formatted += f"User: {entry['user']}\n"
+            if 'assistant' in entry:
+                formatted += f"Assistant: {entry['assistant']}\n"
+        
+        # Add the current query
+        formatted += f"User: {current_query}\nAssistant:"
+        return formatted
+
+
+class OlympicModelInterface:
+    """Interface to the OlympicCoder model for simplified usage"""
+    
+    def __init__(self, model, tokenizer):
+        """Initialize with loaded model and tokenizer"""
+        self.model = model
+        self.tokenizer = tokenizer
+        self.logger = logging.getLogger(__name__)
+    
+    def get_response(self, query: str, context: Dict[str, Any] = None) -> str:
+        """
+        Get a response from the OlympicCoder model
+        
+        Args:
+            query: The query to answer
+            context: Additional context or parameters
+            
+        Returns:
+            Model's response as string
+        """
+        try:
+            # Check if this is a code-related query
+            is_code_query = self._is_code_related(query)
+            
+            # Prepare the query with or without context
+            if context and 'conversation_history' in context:
+                # Format with conversation history
+                history = context['conversation_history']
+                full_prompt = self._format_conversation(history, query, is_code_query)
+            else:
+                # Direct query with appropriate formatting for code
+                if is_code_query:
+                    full_prompt = f"<human>: Write code for the following task:\n{query}\n\n<model>:"
+                else:
+                    full_prompt = f"<human>: {query}\n\n<model>:"
+            
+            # Generate response using the model
+            self.logger.info(f"Generating response with OlympicCoder model")
+            
+            # For OlympicCoder GGUF model (ctransformers)
+            if not hasattr(self.model, "device"):
+                # This is a GGUF model
+                response_text = self.model(
+                    full_prompt,
+                    max_new_tokens=context.get("max_tokens", 1024) if context else 1024,
+                    temperature=context.get("temperature", 0.7) if context else 0.7,
+                    top_p=context.get("top_p", 0.9) if context else 0.9
+                )
+                return response_text.strip()
+            
+            # For standard transformers model
+            inputs = self.tokenizer(full_prompt, return_tensors="pt")
+            if hasattr(self.model, "device") and self.model.device.type == "cuda":
+                inputs = {k: v.cuda() for k, v in inputs.items()}
+            
+            # Set generation parameters
+            generation_args = {
+                "max_new_tokens": context.get("max_tokens", 1024) if context else 1024,
+                "temperature": context.get("temperature", 0.7) if context else 0.7,
+                "top_p": context.get("top_p", 0.9) if context else 0.9,
+                "do_sample": True,
+                "num_return_sequences": 1
+            }
+            
+            # Generate response
+            outputs = self.model.generate(**inputs, **generation_args)
+            response_text = self.tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+            
+            return response_text.strip()
+        
+        except Exception as e:
+            error_msg = f"Error generating OlympicCoder response: {str(e)}"
+            self.logger.error(error_msg)
+            return f"Error: {error_msg}"
+    
+    def _is_code_related(self, query: str) -> bool:
+        """Determine if the query is code-related"""
+        code_keywords = [
+            "code", "function", "class", "implement", "write", "program",
+            "algorithm", "python", "javascript", "java", "c++", "html",
+            "css", "sql", "api", "module", "library"
+        ]
+        
+        # Check if any code keywords are in the query
+        query_lower = query.lower()
+        return any(keyword in query_lower for keyword in code_keywords)
+    
+    def _format_conversation(self, history: List[Dict[str, str]], current_query: str, is_code_query: bool = False) -> str:
+        """Format a conversation history with the current query"""
+        formatted = ""
+        for entry in history:
+            if 'user' in entry:
+                formatted += f"<human>: {entry['user']}\n\n"
+            if 'assistant' in entry:
+                formatted += f"<model>: {entry['assistant']}\n\n"
+        
+        # Add the current query with appropriate formatting for code
+        if is_code_query:
+            formatted += f"<human>: Write code for the following task:\n{current_query}\n\n<model>:"
+        else:
+            formatted += f"<human>: {current_query}\n\n<model>:"
+        
+        return formatted
+
+
+# Add methods to ModelManager class to get model interfaces
+def get_qwen_model():
+    """Get the Qwen model for use"""
+    model_manager.load_model(ModelType.QWEN)
+    return QwenModelInterface(
+        model=model_manager.loaded_models.get("qwen"),
+        tokenizer=model_manager.loaded_tokenizers.get("qwen")
+    )
+
+def get_olympic_model():
+    """Get the OlympicCoder model for use"""
+    model_manager.load_model(ModelType.OLYMPIC)
+    return OlympicModelInterface(
+        model=model_manager.loaded_models.get("olympic"),
+        tokenizer=model_manager.loaded_tokenizers.get("olympic")
+    )
+
+# Initialize model manager
 model_manager = ModelManager()

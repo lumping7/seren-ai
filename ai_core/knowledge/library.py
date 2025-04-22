@@ -959,6 +959,86 @@ class KnowledgeLibrary(object):
         """
         return self.search_knowledge(query, limit)
     
+    def extract_knowledge(
+        self, 
+        content: str, 
+        source_reference: str = None, 
+        categories: List[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Extract knowledge entries from content
+        
+        Args:
+            content: Content to extract knowledge from
+            source_reference: Reference to the source
+            categories: Categories for the extracted knowledge
+            
+        Returns:
+            List of extracted knowledge entries as dictionaries
+        """
+        # Default values
+        extracted_entries = []
+        source_reference = source_reference or "auto_extract"
+        categories = categories or ["extracted_knowledge"]
+        
+        try:
+            # Use sentence tokenization if available
+            sentences = []
+            if has_nltk:
+                # Use NLTK to split into sentences
+                sentences = sent_tokenize(content)
+            else:
+                # Simple splitting based on common sentence ending punctuation
+                # This is a fallback for when NLTK is not available
+                split_content = re.split(r'(?<=[.!?])\s+', content)
+                sentences = [s.strip() for s in split_content if s.strip()]
+            
+            # If no sentences, just return the whole content as one entry
+            if not sentences:
+                entry = {
+                    "content": content,
+                    "source_reference": source_reference,
+                    "categories": categories
+                }
+                extracted_entries.append(entry)
+                return extracted_entries
+            
+            # Process sentences to extract knowledge
+            current_chunk = ""
+            for sentence in sentences:
+                # Skip very short sentences
+                if len(sentence) < 10:
+                    current_chunk += sentence + " "
+                    continue
+                
+                # Add sentence to current chunk
+                current_chunk += sentence + " "
+                
+                # Check if chunk is substantial enough to be knowledge
+                if len(current_chunk) >= 100:
+                    # Create knowledge entry
+                    entry = {
+                        "content": current_chunk.strip(),
+                        "source_reference": source_reference,
+                        "categories": categories
+                    }
+                    extracted_entries.append(entry)
+                    current_chunk = ""
+            
+            # Add any remaining content as an entry
+            if current_chunk.strip():
+                entry = {
+                    "content": current_chunk.strip(),
+                    "source_reference": source_reference,
+                    "categories": categories
+                }
+                extracted_entries.append(entry)
+            
+        except Exception as e:
+            logger.error(f"Error extracting knowledge: {str(e)}")
+        
+        return extracted_entries
+    
     def extract_context_for_query(self, query: str, limit: int = 5) -> str:
         """
         Extract a context string for a query
