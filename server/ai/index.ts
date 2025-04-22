@@ -8,6 +8,7 @@ import { executeCodeHandler } from './execution';
 import { knowledgeApi } from './knowledge-api';
 import { conversationManager } from './conversation';
 import { resourceManager } from './resource-manager';
+import { systemApi } from './system-api';
 
 // Create AI router
 const aiRouter = express.Router();
@@ -110,9 +111,7 @@ aiRouter.post('/memory', memoryHandler.storeMemory);
 aiRouter.get('/memory/search', memoryHandler.searchMemories);
 
 // Reasoning system routes
-aiRouter.post('/reason', reasoningHandler.performReasoning);
-aiRouter.get('/reason/operations', reasoningHandler.getOperationSets);
-aiRouter.get('/reason/history', reasoningHandler.getReasoningHistory);
+aiRouter.post('/reason', reasoningHandler);
 
 // Code execution routes
 aiRouter.post('/execute', executeCodeHandler);
@@ -181,64 +180,9 @@ aiRouter.get('/conversation/:id', async (req, res) => {
 });
 
 // System information and management
-aiRouter.get('/system/resources', (req, res) => {
-  const resources = resourceManager.getSystemResources();
-  const profile = resourceManager.getProfile();
-  const limits = resourceManager.getLimits();
-  
-  res.json({
-    success: true,
-    resources,
-    profile,
-    limits
-  });
-});
+aiRouter.get('/system/resources', systemApi.getResources);
 
 // System status and capabilities
-aiRouter.get('/status', (req, res) => {
-  const resourceProfile = resourceManager.getProfile();
-  const resourceLimits = resourceManager.getLimits();
-  
-  res.json({
-    status: 'operational',
-    models: [
-      {
-        id: 'llama3',
-        version: '3.1.0',
-        status: 'active',
-        capabilities: ['logical reasoning', 'architectural design', 'code generation', 'technical documentation'],
-        context_length: resourceLimits.maxContextSize
-      },
-      {
-        id: 'gemma3',
-        version: '3.0.2',
-        status: 'active',
-        capabilities: ['creative writing', 'summarization', 'UI/UX suggestions', 'implementation details'],
-        context_length: resourceLimits.maxContextSize
-      },
-      {
-        id: 'hybrid',
-        version: '1.0.0',
-        status: 'active',
-        capabilities: ['collaborative design', 'full-stack implementation', 'seamless architecture-to-code flow'],
-        context_length: resourceLimits.maxContextSize,
-        components: ['llama3', 'gemma3', 'reasoning']
-      }
-    ],
-    capabilities: {
-      reasoning: true,
-      memory: true,
-      code_execution: true,
-      neuro_symbolic: true,
-      knowledge_base: true,
-      self_learning: true,
-      adaptive_resources: true,
-      conversation: true
-    },
-    resource_profile: resourceProfile,
-    system_load: resourceManager.getSystemResources().cpuUsage / 100,
-    last_updated: new Date().toISOString()
-  });
-});
+aiRouter.get('/status', systemApi.getStatus);
 
 export { aiRouter };
