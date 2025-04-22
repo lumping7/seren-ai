@@ -37,6 +37,7 @@ except ImportError:
     class ModelType:
         QWEN = "qwen"
         OLYMPIC = "olympic"
+        SYSTEM = "system"
 
 # Import knowledge library
 from ai_core.knowledge.library import knowledge_library, KnowledgeSource
@@ -500,11 +501,115 @@ class CommunicationSystem:
             "knowledge_used": []
         }
         
-        # This is a stub method - in real implementation, would:
-        # 1. Get individual responses from each model
+        # Process query with all models and enable collaboration
+        primary_model = models[0]
+        secondary_models = models[1:]
+        
+        # 1. Get initial responses from each model
+        logger.info(f"Getting initial responses from {len(models)} models")
+        
+        for model in models:
+            # Send the query message to each model
+            self.send_message(
+                conversation_id=conversation_id,
+                from_model=ModelType.SYSTEM,
+                to_model=model,
+                message_type=MessageType.QUERY,
+                content=query,
+                encrypted=True
+            )
+            
+            # In a real system, this would wait for the model to process and respond
+            # Here we'll directly fetch model outputs from the model relay system
+            try:
+                from ai_core.model_relay import model_relay
+                model_response = model_relay.get_model_response(model.value, query, context)
+                
+                # Store the response
+                response["responses"][model.value] = {
+                    "content": model_response,
+                    "timestamp": datetime.datetime.now().isoformat()
+                }
+            except Exception as e:
+                logger.error(f"Error getting response from model {model.value}: {str(e)}")
+                response["responses"][model.value] = {
+                    "content": f"Error: {str(e)}",
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "error": True
+                }
+        
         # 2. Share knowledge between models
+        logger.info("Sharing knowledge between models")
+        shared_knowledge = []
+        
+        if hasattr(knowledge_library, "extract_knowledge"):
+            # For each model response, extract knowledge and share with other models
+            for model in models:
+                model_value = model.value
+                if model_value in response["responses"] and not response["responses"][model_value].get("error", False):
+                    # Extract knowledge from response
+                    knowledge_entries = knowledge_library.extract_knowledge(
+                        content=response["responses"][model_value]["content"],
+                        source_reference=f"model_response:{model_value}",
+                        categories=["collaborative_response"]
+                    )
+                    
+                    # Share each knowledge entry with other models
+                    for entry in knowledge_entries:
+                        shared_knowledge.append(entry)
+                        # Share with all other models
+                        for other_model in [m for m in models if m != model]:
+                            self.share_knowledge(
+                                conversation_id=conversation_id,
+                                from_model=model,
+                                to_model=other_model,
+                                content=entry["content"],
+                                source_reference=entry["source_reference"],
+                                categories=entry["categories"]
+                            )
+        
+        # Record the shared knowledge
+        response["knowledge_used"] = shared_knowledge
+        
         # 3. Have models collaborate to refine the response
-        # 4. Combine responses into a final answer
+        logger.info("Collaborating to refine response")
+        refinement_prompt = f"""
+        Query: {query}
+        
+        Here are the initial responses from all models:
+        {json.dumps(response["responses"], indent=2)}
+        
+        Please provide a refined response that incorporates the best elements
+        of all initial responses and the shared knowledge.
+        """
+        
+        # Ask primary model to create a refined response
+        try:
+            from ai_core.model_relay import model_relay
+            refined_response = model_relay.get_model_response(
+                primary_model.value, 
+                refinement_prompt,
+                {
+                    "conversation_id": conversation_id,
+                    "knowledge": shared_knowledge,
+                    "collaboration_type": "refinement"
+                }
+            )
+            
+            # Store the refined response
+            response["combined_response"] = refined_response
+        except Exception as e:
+            logger.error(f"Error getting refined response: {str(e)}")
+            # Fall back to concatenating responses if refinement fails
+            response["combined_response"] = "\n\n".join([
+                f"Response from {model_id}:\n{data['content']}"
+                for model_id, data in response["responses"].items()
+                if not data.get("error", False)
+            ])
+        
+        # Mark processing as complete
+        response["completed_at"] = datetime.datetime.now().isoformat()
+        response["status"] = "success"
         
         return response
     
