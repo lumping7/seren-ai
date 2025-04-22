@@ -35,10 +35,17 @@ interface HybridResponse {
     collaborative_data?: {
       llama3_contribution: number;
       gemma3_contribution: number;
-      reasoning_steps: string[];
+      reasoning_steps: readonly string[];
     };
     request_id: string;
   };
+}
+
+// Type for collaborative data for more precise typing
+interface CollaborativeData {
+  llama3_contribution: number;
+  gemma3_contribution: number;
+  reasoning_steps: string[];
 }
 
 /**
@@ -108,7 +115,7 @@ export async function hybridHandler(req: Request, res: Response) {
     // Determine processing mode based on options
     const processingMode = options.mode || 'collaborative';
     let result: string;
-    let collaborativeData: any = {
+    let collaborativeData: CollaborativeData = {
       llama3_contribution: 0.5,
       gemma3_contribution: 0.5,
       reasoning_steps: []
@@ -295,7 +302,7 @@ async function combineCollaborativeResponses(
   llamaResponse: string,
   gemmaResponse: string,
   originalPrompt: string,
-  collaborativeData: any
+  collaborativeData: CollaborativeData
 ): Promise<string> {
   // Analyze which parts of the response should come from which model
   const llamaStrengths = detectModelStrengths(llamaResponse, 'llama3');
@@ -543,9 +550,9 @@ function selectBestResponse(
   response1: string, 
   response2: string, 
   prompt: string
-): [string, any] {
-  // Simple metrics: length, specificity, relevance
-  const metrics = {
+): [string, CollaborativeData] {
+  // Create metrics object with proper typing
+  const metrics: CollaborativeData = {
     llama3_contribution: 0,
     gemma3_contribution: 0,
     reasoning_steps: []

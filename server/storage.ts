@@ -96,26 +96,30 @@ export class DatabaseStorage implements IStorage {
   }
   
   async getMemories(limit?: number): Promise<Memory[]> {
-    let query = db.select().from(aiMemories).orderBy(desc(aiMemories.timestamp));
+    // Create base query
+    const baseQuery = db.select().from(aiMemories).orderBy(desc(aiMemories.timestamp));
     
+    // Execute with or without limit
     if (limit) {
-      query = query.limit(limit);
+      return await baseQuery.limit(limit);
+    } else {
+      return await baseQuery;
     }
-    
-    return await query;
   }
   
   async getMemoriesByUser(userId: number, limit?: number): Promise<Memory[]> {
-    let query = db.select()
+    // Create base query with user filter
+    const baseQuery = db.select()
       .from(aiMemories)
       .where(eq(aiMemories.userId, userId))
       .orderBy(desc(aiMemories.timestamp));
     
+    // Execute with or without limit
     if (limit) {
-      query = query.limit(limit);
+      return await baseQuery.limit(limit);
+    } else {
+      return await baseQuery;
     }
-    
-    return await query;
   }
   
   async createMemory(memory: InsertMemory): Promise<Memory> {
