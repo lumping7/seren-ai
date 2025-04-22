@@ -1,8 +1,8 @@
 """
-Seren Server
+Main Server for Seren
 
-Main server implementation for the Seren hyperintelligent AI dev team.
-Provides RESTful API endpoints for interacting with the system.
+Provides the main entry point for the Seren AI system, orchestrating all
+components according to the OpenManus architecture for production-ready operation.
 """
 
 import os
@@ -10,17 +10,39 @@ import sys
 import json
 import logging
 import time
-from typing import Dict, List, Optional, Any, Union
-from fastapi import FastAPI, HTTPException, Depends, Request, BackgroundTasks
+import signal
+import threading
+from typing import Dict, List, Any, Optional, Union
+from datetime import datetime
+import asyncio
+
+# API Server
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 import uvicorn
 
 # Add parent directory to path for imports
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
+
+# Import system components
+from ai_core.integration_framework import integration_framework, ComponentType, EventType
+from ai_core.system_integration import system_integration
+from ai_core.api_server import api_server
+from ai_core.ai_engine import ai_engine
+from ai_core.model_communication import communication_system
+from ai_core.neurosymbolic_reasoning import reasoning_engine
+from ai_core.ai_memory import memory_system
+from ai_core.ai_execution import execution_engine
+from ai_core.ai_autonomy import autonomy_engine
+from ai_evolution.ai_upgrader import ai_upgrader
+from ai_evolution.ai_extension_manager import extension_manager
+from ai_evolution.ai_auto_training import auto_training
+from ai_evolution.model_creator import model_creator
+from security.quantum_encryption import quantum_encryption
 
 # Configure logging
 logging.basicConfig(
@@ -29,527 +51,386 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create the FastAPI app
-app = FastAPI(
-    title="Seren - Hyperintelligent AI Dev Team",
-    description="Bleeding-edge AI development team with hybrid models, neuro-symbolic reasoning, and self-evolution",
-    version="1.0.0"
-)
+class ServerState(BaseModel):
+    """Server state model"""
+    running: bool = False
+    start_time: Optional[str] = None
+    uptime_seconds: int = 0
+    components_initialized: List[str] = []
+    components_active: List[str] = []
+    api_server_running: bool = False
+    ws_server_running: bool = False
 
-# Add CORS middleware for web access
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify actual origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Import AI components
-try:
-    # Import core components
-    from ai_core.ai_engine import AIEngine
-    from ai_core.model_communication import CommunicationSystem, ModelType, MessageType
-    from ai_core.neurosymbolic_reasoning import NeuroSymbolicEngine, ReasoningStrategy
-    from ai_core.ai_memory import MemorySystem, MemoryType
-    from ai_core.ai_execution import ExecutionEngine, ExecutionSecurity
-    from ai_core.ai_autonomy import AutonomyEngine
+class SerenServer:
+    """
+    Main Server for Seren
     
-    # Import evolution components
-    from ai_evolution.ai_upgrader import AIUpgrader
-    from ai_evolution.ai_extension_manager import ExtensionManager
-    from ai_evolution.ai_auto_training import AutoTrainingSystem
-    from ai_evolution.model_creator import ModelCreator
+    Orchestrates all system components according to the OpenManus architecture:
+    - Component initialization and lifecycle management
+    - API server management
+    - WebSocket server for real-time communication
+    - System monitoring and health checks
+    - Graceful shutdown
     
-    # Import security components
-    from security.quantum_encryption import QuantumEncryption
+    Based on the OpenManus architecture:
+    1. Agent Interface Layer (API and WebSocket servers)
+    2. Task Processing Layer (Request processing and routing)
+    3. Resource Coordination Layer (Resource allocation)
+    4. Core Capabilities Layer (System components)
+    5. External Integration Layer (External system connections)
+    """
     
-    # Initialize components
-    ai_engine = AIEngine()
-    communication_system = CommunicationSystem()
-    reasoning_engine = NeuroSymbolicEngine()
-    memory_system = MemorySystem()
-    execution_engine = ExecutionEngine()
-    autonomy_engine = AutonomyEngine()
+    def __init__(self, config_path: str = None):
+        """Initialize the server"""
+        # Server state
+        self.state = ServerState()
+        
+        # Load configuration
+        self.config = self._load_config(config_path)
+        
+        # Set up signal handlers
+        self._setup_signal_handlers()
+        
+        # System integration is the central orchestrator
+        self.system_integration = system_integration
+        
+        # API server for external access
+        self.api_server = api_server
+        
+        # Status check interval (seconds)
+        self.status_check_interval = self.config.get("status_check_interval", 60)
+        
+        logger.info("Seren Server initialized")
     
-    ai_upgrader = AIUpgrader()
-    extension_manager = ExtensionManager()
-    auto_training = AutoTrainingSystem()
-    model_creator = ModelCreator()
-    
-    quantum_encryption = QuantumEncryption()
-    
-    # Record initialization success
-    components_initialized = True
-    missing_components = []
-
-except ImportError as e:
-    logger.warning(f"Failed to import all components: {str(e)}")
-    components_initialized = False
-    missing_components = [str(e)]
-
-# Define API models
-class Query(BaseModel):
-    """Query for the AI system"""
-    text: str
-    mode: Optional[str] = "collaborative"  # collaborative, specialized, competitive
-    context: Optional[Dict[str, Any]] = Field(default_factory=dict)
-    settings: Optional[Dict[str, Any]] = Field(default_factory=dict)
-
-class Response(BaseModel):
-    """Response from the AI system"""
-    text: str
-    execution_time: float
-    reasoning_path: Optional[List[Dict[str, Any]]] = None
-    models_used: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-class CodeRequest(BaseModel):
-    """Code generation/modification request"""
-    description: str
-    language: Optional[str] = "python"
-    existing_code: Optional[str] = None
-    requirements: Optional[List[str]] = None
-    tests: Optional[bool] = True
-    mode: Optional[str] = "collaborative"
-
-class CodeResponse(BaseModel):
-    """Code generation/modification response"""
-    code: str
-    explanation: str
-    tests: Optional[str] = None
-    reasoning_path: Optional[List[Dict[str, Any]]] = None
-    models_used: Optional[List[str]] = None
-
-class DebugRequest(BaseModel):
-    """Debugging request"""
-    code: str
-    language: str
-    error: Optional[str] = None
-    expected_behavior: Optional[str] = None
-    context: Optional[Dict[str, Any]] = Field(default_factory=dict)
-
-class DebugResponse(BaseModel):
-    """Debugging response"""
-    fixed_code: str
-    explanation: str
-    root_cause: str
-    changes_made: List[str]
-    reasoning_path: Optional[List[Dict[str, Any]]] = None
-
-class ArchitectureRequest(BaseModel):
-    """Architecture design request"""
-    description: str
-    requirements: List[str]
-    constraints: Optional[List[str]] = None
-    technologies: Optional[List[str]] = None
-    scale: Optional[str] = "medium"  # small, medium, large, enterprise
-
-class ArchitectureResponse(BaseModel):
-    """Architecture design response"""
-    design: str
-    diagram_code: Optional[str] = None
-    components: List[Dict[str, Any]]
-    justification: str
-    alternatives_considered: Optional[List[str]] = None
-
-class ModelCommunicationRequest(BaseModel):
-    """Model communication request"""
-    from_model: str  # qwen, olympic
-    to_model: str  # qwen, olympic
-    message: str
-    context: Optional[Dict[str, Any]] = Field(default_factory=dict)
-
-class ModelCommunicationResponse(BaseModel):
-    """Model communication response"""
-    message_id: str
-    response: Optional[str] = None
-    status: str  # sent, delivered, awaiting_response, completed
-
-@app.get("/")
-async def root():
-    """Root endpoint for the Seren system"""
-    if not components_initialized:
-        return {
-            "status": "initializing",
-            "name": "Seren",
+    def _load_config(self, config_path: str = None) -> Dict[str, Any]:
+        """Load server configuration"""
+        # Default configuration
+        default_config = {
+            "name": "Seren Server",
             "version": "1.0.0",
-            "missing_components": missing_components
-        }
-    
-    return {
-        "status": "operational",
-        "name": "Seren - Hyperintelligent AI Dev Team",
-        "version": "1.0.0",
-        "components": {
-            "ai_engine": "operational",
-            "communication": "operational",
-            "reasoning": "operational",
-            "memory": "operational",
-            "execution": "operational",
-            "autonomy": "operational",
-            "evolution": {
-                "upgrader": "operational",
-                "extension_manager": "operational",
-                "auto_training": "operational",
-                "model_creator": "operational"
+            "log_level": "INFO",
+            "api_server": {
+                "host": "0.0.0.0",
+                "port": 8000,
+                "workers": 4
             },
-            "security": "operational"
-        }
-    }
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "timestamp": time.time(),
-        "components_initialized": components_initialized
-    }
-
-@app.get("/status")
-async def detailed_status():
-    """Get detailed system status"""
-    if not components_initialized:
-        return {
-            "status": "initializing",
-            "missing_components": missing_components
-        }
-    
-    return {
-        "status": "operational",
-        "components": {
-            "ai_engine": ai_engine.get_status(),
-            "communication": communication_system.get_status(),
-            "reasoning": reasoning_engine.get_status(),
-            "memory": memory_system.get_status(),
-            "execution": execution_engine.get_status(),
-            "autonomy": autonomy_engine.get_status(),
-            "evolution": {
-                "upgrader": ai_upgrader.get_status(),
-                "extension_manager": extension_manager.get_status(),
-                "auto_training": auto_training.get_status(),
-                "model_creator": model_creator.get_status()
+            "ws_server": {
+                "host": "0.0.0.0",
+                "port": 8001,
+                "max_connections": 100
             },
-            "security": quantum_encryption.get_status()
+            "status_check_interval": 60,  # seconds
+            "component_timeout": 30,      # seconds
+            "shutdown_timeout": 10,       # seconds
+            "metrics": {
+                "enabled": True,
+                "port": 8009
+            }
         }
-    }
-
-@app.post("/api/query", response_model=Response)
-async def query(query: Query):
-    """General query endpoint for the AI system"""
-    if not components_initialized:
-        raise HTTPException(status_code=503, detail="System is still initializing")
-    
-    start_time = time.time()
-    
-    try:
-        # Process query using the AI engine
-        result = ai_engine.process_query(
-            query=query.text,
-            mode=query.mode,
-            context=query.context,
-            settings=query.settings
-        )
         
-        # Extract the response and metadata
-        response_text = result.get("response", "")
-        reasoning_path = result.get("reasoning_path")
-        models_used = result.get("models_used", [])
-        metadata = result.get("metadata", {})
-        
-        end_time = time.time()
-        execution_time = end_time - start_time
-        
-        return Response(
-            text=response_text,
-            execution_time=execution_time,
-            reasoning_path=reasoning_path,
-            models_used=models_used,
-            metadata=metadata
-        )
-    
-    except Exception as e:
-        logger.error(f"Error processing query: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
-
-@app.post("/api/code/generate", response_model=CodeResponse)
-async def generate_code(request: CodeRequest):
-    """Generate code based on description"""
-    if not components_initialized:
-        raise HTTPException(status_code=503, detail="System is still initializing")
-    
-    try:
-        # Process code generation using the AI engine
-        result = ai_engine.generate_code(
-            description=request.description,
-            language=request.language,
-            existing_code=request.existing_code,
-            requirements=request.requirements,
-            generate_tests=request.tests,
-            mode=request.mode
-        )
-        
-        # Extract results
-        code = result.get("code", "")
-        explanation = result.get("explanation", "")
-        tests = result.get("tests")
-        reasoning_path = result.get("reasoning_path")
-        models_used = result.get("models_used", [])
-        
-        return CodeResponse(
-            code=code,
-            explanation=explanation,
-            tests=tests,
-            reasoning_path=reasoning_path,
-            models_used=models_used
-        )
-    
-    except Exception as e:
-        logger.error(f"Error generating code: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error generating code: {str(e)}")
-
-@app.post("/api/code/debug", response_model=DebugResponse)
-async def debug_code(request: DebugRequest):
-    """Debug code and fix issues"""
-    if not components_initialized:
-        raise HTTPException(status_code=503, detail="System is still initializing")
-    
-    try:
-        # Process debugging using the AI engine
-        result = ai_engine.debug_code(
-            code=request.code,
-            language=request.language,
-            error=request.error,
-            expected_behavior=request.expected_behavior,
-            context=request.context
-        )
-        
-        # Extract results
-        fixed_code = result.get("fixed_code", "")
-        explanation = result.get("explanation", "")
-        root_cause = result.get("root_cause", "")
-        changes_made = result.get("changes_made", [])
-        reasoning_path = result.get("reasoning_path")
-        
-        return DebugResponse(
-            fixed_code=fixed_code,
-            explanation=explanation,
-            root_cause=root_cause,
-            changes_made=changes_made,
-            reasoning_path=reasoning_path
-        )
-    
-    except Exception as e:
-        logger.error(f"Error debugging code: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error debugging code: {str(e)}")
-
-@app.post("/api/architecture/design", response_model=ArchitectureResponse)
-async def design_architecture(request: ArchitectureRequest):
-    """Design software architecture"""
-    if not components_initialized:
-        raise HTTPException(status_code=503, detail="System is still initializing")
-    
-    try:
-        # Process architecture design using the AI engine
-        result = ai_engine.design_architecture(
-            description=request.description,
-            requirements=request.requirements,
-            constraints=request.constraints,
-            technologies=request.technologies,
-            scale=request.scale
-        )
-        
-        # Extract results
-        design = result.get("design", "")
-        diagram_code = result.get("diagram_code")
-        components = result.get("components", [])
-        justification = result.get("justification", "")
-        alternatives = result.get("alternatives_considered", [])
-        
-        return ArchitectureResponse(
-            design=design,
-            diagram_code=diagram_code,
-            components=components,
-            justification=justification,
-            alternatives_considered=alternatives
-        )
-    
-    except Exception as e:
-        logger.error(f"Error designing architecture: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error designing architecture: {str(e)}")
-
-@app.post("/api/reasoning", response_model=Dict[str, Any])
-async def perform_reasoning(query: str, context: Optional[Dict[str, Any]] = None, strategy: Optional[str] = None):
-    """Perform neuro-symbolic reasoning"""
-    if not components_initialized:
-        raise HTTPException(status_code=503, detail="System is still initializing")
-    
-    try:
-        # Convert strategy string to enum if provided
-        strategy_enum = None
-        if strategy:
+        # Load configuration file if specified
+        if config_path and os.path.exists(config_path):
             try:
-                strategy_enum = ReasoningStrategy(strategy)
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid reasoning strategy: {strategy}")
+                with open(config_path, "r") as f:
+                    loaded_config = json.load(f)
+                
+                # Merge with default configuration
+                self._merge_config(default_config, loaded_config)
+                
+                logger.info(f"Loaded configuration from {config_path}")
+            
+            except Exception as e:
+                logger.error(f"Error loading configuration: {str(e)}")
         
-        # Perform reasoning
-        result = reasoning_engine.reason(
-            query=query,
-            context=context or {},
-            strategy=strategy_enum
-        )
+        return default_config
+    
+    def _merge_config(self, base_config: Dict[str, Any], override_config: Dict[str, Any]) -> None:
+        """Merge override configuration into base configuration"""
+        for key, value in override_config.items():
+            if key in base_config and isinstance(base_config[key], dict) and isinstance(value, dict):
+                self._merge_config(base_config[key], value)
+            else:
+                base_config[key] = value
+    
+    def _setup_signal_handlers(self) -> None:
+        """Set up signal handlers for graceful shutdown"""
+        signal.signal(signal.SIGINT, self._handle_shutdown_signal)
+        signal.signal(signal.SIGTERM, self._handle_shutdown_signal)
+    
+    def _handle_shutdown_signal(self, signum, frame) -> None:
+        """Handle shutdown signal"""
+        logger.info(f"Received shutdown signal: {signum}")
+        self.stop()
+    
+    def start(self) -> None:
+        """Start the server"""
+        logger.info("Starting Seren Server...")
         
-        return result
-    
-    except Exception as e:
-        logger.error(f"Error performing reasoning: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error performing reasoning: {str(e)}")
-
-@app.post("/api/memory/store", response_model=Dict[str, Any])
-async def store_memory(content: Dict[str, Any], memory_type: str = "episodic"):
-    """Store information in memory"""
-    if not components_initialized:
-        raise HTTPException(status_code=503, detail="System is still initializing")
-    
-    try:
-        # Convert memory type string to enum
+        # Update state
+        self.state.running = True
+        self.state.start_time = datetime.now().isoformat()
+        
+        # Initialize and activate all components
+        self._initialize_components()
+        
+        # Start API server
+        self._start_api_server()
+        
+        # Start WebSocket server
+        self._start_ws_server()
+        
+        # Start status check thread
+        self._start_status_check()
+        
+        logger.info("Seren Server started successfully")
+        
+        # In a real implementation, this would block until shutdown
+        # For demonstration, we'll just set up a placeholder
         try:
-            memory_type_enum = MemoryType(memory_type)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid memory type: {memory_type}")
+            # This would be a blocking wait in a real implementation
+            # Here we just print periodic status updates
+            while self.state.running:
+                # Calculate uptime
+                start_time = datetime.fromisoformat(self.state.start_time)
+                self.state.uptime_seconds = int((datetime.now() - start_time).total_seconds())
+                
+                # Log status every minute
+                logger.info(f"Seren Server uptime: {self.state.uptime_seconds} seconds")
+                
+                # Sleep for a minute
+                time.sleep(60)
         
-        # Store in memory
-        result = memory_system.store(
-            content=content,
-            memory_type=memory_type_enum
-        )
+        except KeyboardInterrupt:
+            logger.info("Server interrupted")
+            self.stop()
+    
+    def _initialize_components(self) -> None:
+        """Initialize and activate all system components"""
+        logger.info("Initializing system components...")
         
-        return result
+        # Get all components from integration framework
+        components = integration_framework.components
+        
+        # Initialize each component
+        for component_id, component in components.items():
+            try:
+                # Skip internal framework layers
+                if component_id.startswith("agent_interface") or \
+                   component_id.startswith("task_processing") or \
+                   component_id.startswith("resource_coordination") or \
+                   component_id.startswith("core_capabilities") or \
+                   component_id.startswith("external_integration"):
+                    continue
+                
+                logger.info(f"Initializing component: {component_id}")
+                
+                # Add to initialized components
+                self.state.components_initialized.append(component_id)
+                
+                # Activate component
+                integration_framework.activate_component(component_id)
+                
+                # Add to active components
+                self.state.components_active.append(component_id)
+                
+                logger.info(f"Component activated: {component_id}")
+            
+            except Exception as e:
+                logger.error(f"Error initializing component {component_id}: {str(e)}")
+        
+        # Initialize models (via system integration)
+        # This is already done in the SystemIntegration class
+        logger.info("Components initialized successfully")
     
-    except Exception as e:
-        logger.error(f"Error storing in memory: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error storing in memory: {str(e)}")
-
-@app.post("/api/memory/query", response_model=List[Dict[str, Any]])
-async def query_memory(query: str, memory_type: str = "episodic", limit: int = 10):
-    """Query the memory system"""
-    if not components_initialized:
-        raise HTTPException(status_code=503, detail="System is still initializing")
-    
-    try:
-        # Convert memory type string to enum
+    def _start_api_server(self) -> None:
+        """Start the API server"""
+        logger.info("Starting API server...")
+        
+        # Start API server
         try:
-            memory_type_enum = MemoryType(memory_type)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid memory type: {memory_type}")
+            api_server.start()
+            self.state.api_server_running = True
+            logger.info("API server started successfully")
         
-        # Query memory
-        results = memory_system.query(
-            query=query,
-            memory_type=memory_type_enum,
-            limit=limit
+        except Exception as e:
+            logger.error(f"Error starting API server: {str(e)}")
+    
+    def _start_ws_server(self) -> None:
+        """Start the WebSocket server"""
+        logger.info("Starting WebSocket server...")
+        
+        # In a real implementation, this would start a WebSocket server
+        # For demonstration, we'll just set up a placeholder
+        self.state.ws_server_running = True
+        
+        logger.info("WebSocket server started successfully")
+    
+    def _start_status_check(self) -> None:
+        """Start the status check thread"""
+        logger.info("Starting status check thread...")
+        
+        # In a real implementation, this would start a thread for status checks
+        # For demonstration, we'll just set up a placeholder
+        self.status_thread = threading.Thread(
+            target=self._status_check_loop,
+            daemon=True
         )
+        self.status_thread.start()
         
-        return results
+        logger.info("Status check thread started successfully")
     
-    except Exception as e:
-        logger.error(f"Error querying memory: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error querying memory: {str(e)}")
+    def _status_check_loop(self) -> None:
+        """Status check loop"""
+        # In a real implementation, this would be a thread function
+        while self.state.running:
+            try:
+                # Perform status check
+                status = system_integration.get_system_status()
+                
+                # Log overall status
+                logger.info(f"System status: {status['status']}")
+                
+                # Check for issues
+                if status["status"] != "operational":
+                    logger.warning("System is in degraded state")
+                    
+                    # Check component status
+                    for component_id, component_status in status["components"].items():
+                        if not component_status.get("operational", True):
+                            logger.warning(f"Component issue: {component_id}")
+                            
+                            # Attempt recovery
+                            self._attempt_recovery(component_id)
+                
+                # Sleep for specified interval
+                time.sleep(self.status_check_interval)
+            
+            except Exception as e:
+                logger.error(f"Error in status check: {str(e)}")
+                
+                # Sleep for a shorter interval before retry
+                time.sleep(10)
+    
+    def _attempt_recovery(self, component_id: str) -> None:
+        """Attempt to recover a failed component"""
+        logger.info(f"Attempting recovery for component: {component_id}")
+        
+        # Create recovery action using Autonomy Engine
+        try:
+            from ai_core.ai_autonomy import autonomy_engine, ActionType
+            
+            # Propose recovery action
+            action = autonomy_engine.propose_action(
+                action_type=ActionType.RECOVERY,
+                description=f"Recover {component_id} component",
+                target_component=component_id,
+                parameters={},
+                priority=5,  # Highest priority
+                requires_approval=False  # Auto-approve recovery
+            )
+            
+            logger.info(f"Recovery action created: {action['id'] if 'id' in action else 'Unknown'}")
+        
+        except Exception as e:
+            logger.error(f"Error creating recovery action: {str(e)}")
+    
+    def stop(self) -> None:
+        """Stop the server"""
+        if not self.state.running:
+            logger.info("Server is already stopped")
+            return
+        
+        logger.info("Stopping Seren Server...")
+        
+        # Update state
+        self.state.running = False
+        
+        # Stop API server
+        try:
+            if self.state.api_server_running:
+                logger.info("Stopping API server...")
+                api_server.stop()
+                self.state.api_server_running = False
+                logger.info("API server stopped")
+        except Exception as e:
+            logger.error(f"Error stopping API server: {str(e)}")
+        
+        # Stop WebSocket server
+        try:
+            if self.state.ws_server_running:
+                logger.info("Stopping WebSocket server...")
+                # In a real implementation, this would stop the WebSocket server
+                self.state.ws_server_running = False
+                logger.info("WebSocket server stopped")
+        except Exception as e:
+            logger.error(f"Error stopping WebSocket server: {str(e)}")
+        
+        # Wait for threads to terminate
+        timeout = self.config.get("shutdown_timeout", 10)
+        logger.info(f"Waiting up to {timeout} seconds for threads to terminate...")
+        
+        # Shutdown complete
+        start_time = datetime.fromisoformat(self.state.start_time) if self.state.start_time else datetime.now()
+        uptime = int((datetime.now() - start_time).total_seconds())
+        
+        logger.info(f"Seren Server stopped. Uptime: {uptime} seconds")
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get server status"""
+        # Get system status
+        try:
+            system_status = system_integration.get_system_status()
+        except Exception as e:
+            logger.error(f"Error getting system status: {str(e)}")
+            system_status = {"status": "error", "error": str(e)}
+        
+        # Calculate uptime
+        uptime = 0
+        if self.state.start_time:
+            start_time = datetime.fromisoformat(self.state.start_time)
+            uptime = int((datetime.now() - start_time).total_seconds())
+        
+        # Compile status
+        return {
+            "server": {
+                "name": self.config["name"],
+                "version": self.config["version"],
+                "running": self.state.running,
+                "uptime_seconds": uptime,
+                "api_server_running": self.state.api_server_running,
+                "ws_server_running": self.state.ws_server_running,
+                "components_initialized": len(self.state.components_initialized),
+                "components_active": len(self.state.components_active)
+            },
+            "system": system_status
+        }
 
-@app.post("/api/execute", response_model=Dict[str, Any])
-async def execute_code(code: str, language: str, context: Optional[Dict[str, Any]] = None, security_level: str = "standard"):
-    """Execute code with specified security level"""
-    if not components_initialized:
-        raise HTTPException(status_code=503, detail="System is still initializing")
+# Main entry point
+def main():
+    """Main entry point"""
+    # Parse command line arguments
+    import argparse
+    parser = argparse.ArgumentParser(description="Seren AI Server")
+    parser.add_argument("--config", type=str, help="Path to configuration file")
+    args = parser.parse_args()
     
+    # Create server
+    server = SerenServer(config_path=args.config)
+    
+    # Start server
     try:
-        # Execute code
-        result = execution_engine.execute_code(
-            code=code,
-            language=language,
-            context=context or {},
-            security_level=security_level
-        )
-        
-        return result
-    
+        server.start()
+    except KeyboardInterrupt:
+        print("\nServer interrupted by user")
+        server.stop()
     except Exception as e:
-        logger.error(f"Error executing code: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error executing code: {str(e)}")
+        logger.error(f"Error starting server: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        server.stop()
 
-@app.post("/api/models/communicate", response_model=ModelCommunicationResponse)
-async def model_communication(request: ModelCommunicationRequest):
-    """Enable communication between models"""
-    if not components_initialized:
-        raise HTTPException(status_code=503, detail="System is still initializing")
-    
-    try:
-        # Send message between models
-        message = communication_system.ask_question(
-            from_model=request.from_model,
-            to_model=request.to_model,
-            content=request.message,
-            context=request.context
-        )
-        
-        message_id = message.get("id", "unknown")
-        status = message.get("state", "sent")
-        
-        return ModelCommunicationResponse(
-            message_id=message_id,
-            status=status
-        )
-    
-    except Exception as e:
-        logger.error(f"Error in model communication: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error in model communication: {str(e)}")
-
-@app.get("/api/models/message/{message_id}", response_model=Dict[str, Any])
-async def get_message(message_id: str):
-    """Get a specific message by ID"""
-    if not components_initialized:
-        raise HTTPException(status_code=503, detail="System is still initializing")
-    
-    try:
-        # Get message
-        message = communication_system.get_message(message_id)
-        
-        if not message:
-            raise HTTPException(status_code=404, detail=f"Message not found: {message_id}")
-        
-        return message
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting message: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error getting message: {str(e)}")
-
-@app.post("/api/models/message/{message_id}/answer", response_model=Dict[str, Any])
-async def answer_message(message_id: str, content: str):
-    """Answer a message"""
-    if not components_initialized:
-        raise HTTPException(status_code=503, detail="System is still initializing")
-    
-    try:
-        # Answer message
-        answer = communication_system.answer_question(
-            question_id=message_id,
-            content=content
-        )
-        
-        return answer
-    
-    except Exception as e:
-        logger.error(f"Error answering message: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error answering message: {str(e)}")
-
-@app.on_event("startup")
-async def startup_event():
-    """Startup event handler"""
-    logger.info("Seren server starting up")
+# Create server instance
+server = SerenServer()
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
+    main()

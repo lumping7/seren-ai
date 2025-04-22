@@ -1,8 +1,8 @@
 """
-Hyperintelligent AI Model Creator
+Model Creator for Seren
 
-Generates new specialized AI models based on specific tasks and requirements.
-Enables the AI system to adapt and specialize for different domains and needs.
+Enables creation, customization, and architecture development of novel AI models
+through automated design and optimization processes.
 """
 
 import os
@@ -11,11 +11,11 @@ import json
 import logging
 import time
 import uuid
+from enum import Enum
+from typing import Dict, List, Optional, Any, Union, Set, Tuple, Callable
+from datetime import datetime
 import threading
 import queue
-import subprocess
-from typing import Dict, List, Optional, Any, Union, Set, Tuple
-from datetime import datetime
 
 # Add parent directory to path for imports
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -29,60 +29,55 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Import AI training components
-try:
-    from ai_evolution.ai_auto_training import (
-        TrainingStrategy, ModelArchitecture, ModelOptimization,
-        auto_training
-    )
-except ImportError:
-    logger.warning("Could not import auto_training, using placeholder values")
-    # Define placeholder classes
-    class TrainingStrategy:
-        FINE_TUNING = "fine_tuning"
-        DISTILLATION = "distillation"
-    
-    class ModelArchitecture:
-        NEURO_SYMBOLIC = "neuro_symbolic"
-        HYBRID_TRANSFORMER = "hybrid_transformer"
-    
-    class ModelOptimization:
-        QUANTIZATION = "quantization"
-        PRUNING = "pruning"
-    
-    auto_training = None
+class ModelArchitecture(Enum):
+    """Types of model architectures"""
+    TRANSFORMER = "transformer"          # Transformer architecture
+    RECURSIVE_TRANSFORMER = "recursive_transformer"  # Recursive transformer
+    HYPERDIMENSIONAL = "hyperdimensional"  # Hyperdimensional computing model
+    QUANTUM_NEURAL = "quantum_neural"    # Quantum-inspired neural network
+    SPIKING_NEURAL = "spiking_neural"    # Spiking neural network
+    NEURO_SYMBOLIC = "neuro_symbolic"    # Neuro-symbolic architecture
+    GRAPH_NEURAL = "graph_neural"        # Graph neural network
+    SPARSE_MoE = "sparse_moe"            # Sparse mixture of experts
 
-class ModelSpecialization:
-    """Model specialization domains"""
-    CODE_GENERATION = "code_generation"
-    TECHNICAL_REASONING = "technical_reasoning"
-    CREATIVE_DESIGN = "creative_design"
-    DATA_ANALYSIS = "data_analysis"
-    MATHEMATICAL_REASONING = "mathematical_reasoning"
-    SYSTEM_ARCHITECTURE = "system_architecture"
-    DOMAIN_EXPERT = "domain_expert"
-    HYBRID_GENERALIST = "hybrid_generalist"
+class ModelOptimization(Enum):
+    """Types of model optimizations"""
+    QUANTIZATION = "quantization"              # Model quantization
+    PRUNING = "pruning"                        # Weight pruning
+    KNOWLEDGE_DISTILLATION = "distillation"    # Knowledge distillation
+    NEURAL_ARCHITECTURE_SEARCH = "nas"         # Neural architecture search
+    MIXED_PRECISION = "mixed_precision"        # Mixed precision training
+    TENSOR_FUSION = "tensor_fusion"            # Tensor operation fusion
+    HARDWARE_AWARE = "hardware_aware"          # Hardware-aware optimization
+    EVOLUTIONARY = "evolutionary"              # Evolutionary optimization
 
-class ModelScale:
-    """Model size/scale options"""
-    SMALL = "small"  # ~1-3B parameters
-    MEDIUM = "medium"  # ~7-13B parameters
-    LARGE = "large"  # ~20-70B parameters
-    XLARGE = "xlarge"  # ~100B+ parameters
+class ModelStatus(Enum):
+    """Status of models"""
+    DESIGNING = "designing"      # Model is being designed
+    BUILDING = "building"        # Model is being built
+    VALIDATING = "validating"    # Model is being validated
+    READY = "ready"              # Model is ready for use
+    FAILED = "failed"            # Model creation failed
+    ARCHIVED = "archived"        # Model is archived
+    DEPRECATED = "deprecated"    # Model is deprecated
 
 class ModelCreator:
     """
-    Hyperintelligent AI Model Creator
+    Model Creator for Seren
     
-    Designs, generates, and specializes new AI models for specific tasks
-    and domains.
+    Enables the creation and customization of novel AI model architectures:
+    - Automated model architecture design
+    - Hyperparameter optimization
+    - Architecture customization
+    - Model verification and validation
+    - Efficiency optimization
     
     Bleeding-edge capabilities:
-    1. Adaptive architecture design based on task requirements
-    2. Automatic knowledge distillation from primary models
-    3. Specialization through neuro-symbolic compilation
-    4. Multi-domain fusion for hybrid specialists
-    5. Zero-shot capability transfer across architectures
+    1. Neural architecture search
+    2. Automated hyperparameter optimization
+    3. Architecture fusion and cross-architecture innovation
+    4. Performance prediction and bottleneck identification
+    5. Hardware-aware architecture customization
     """
     
     def __init__(self, base_dir: str = None):
@@ -90,1239 +85,1141 @@ class ModelCreator:
         # Set the base directory
         self.base_dir = base_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
-        # Models directory
-        self.models_dir = os.path.join(self.base_dir, "ai_evolution", "specialized_models")
+        # Set models directory
+        self.models_dir = os.path.join(self.base_dir, "models")
         os.makedirs(self.models_dir, exist_ok=True)
         
         # Model registry
-        self.registry_path = os.path.join(self.base_dir, "ai_evolution", "model_registry.json")
-        self.registry = self._load_registry()
+        self.models = {}
         
-        # Creation tasks queue and worker thread
-        self.task_queue = queue.Queue()
-        self.worker_thread = threading.Thread(target=self._creation_worker, daemon=True)
-        self.worker_thread.start()
+        # Active creation sessions
+        self.active_sessions = set()
         
-        # Active creation tasks
-        self.active_tasks = {}
+        # Creation history
+        self.creation_history = []
         
-        # Configuration
-        self.config = {
-            "max_parallel_creations": 2,
-            "default_model_scale": ModelScale.MEDIUM,
-            "enable_neuro_symbolic_fusion": True,
-            "enable_model_distillation": True,
-            "model_verification_required": True,
-            "specialization_intensity": 0.7,  # 0.0 to 1.0
-            "knowledge_retention_threshold": 0.8,  # 0.0 to 1.0
-            "base_models": {
-                "primary": "Qwen2.5-Omni-7B",
-                "specialized": "OlympicCoder-7B"
+        # Architecture templates
+        self.architecture_templates = {
+            ModelArchitecture.TRANSFORMER.value: {
+                "name": "Transformer",
+                "description": "Standard transformer architecture with self-attention",
+                "components": ["self_attention", "feed_forward", "layer_norm"],
+                "parameters": {
+                    "layers": 12,
+                    "hidden_size": 768,
+                    "attention_heads": 12,
+                    "intermediate_size": 3072,
+                    "max_position_embeddings": 512
+                }
             },
-            "preferred_architectures": {
-                ModelSpecialization.CODE_GENERATION: ModelArchitecture.HYBRID_TRANSFORMER,
-                ModelSpecialization.TECHNICAL_REASONING: ModelArchitecture.NEURO_SYMBOLIC,
-                ModelSpecialization.CREATIVE_DESIGN: ModelArchitecture.NEURAL_STATE_MACHINE,
-                ModelSpecialization.DATA_ANALYSIS: ModelArchitecture.SPARSE_MoE,
-                ModelSpecialization.MATHEMATICAL_REASONING: ModelArchitecture.NEURO_SYMBOLIC,
-                ModelSpecialization.SYSTEM_ARCHITECTURE: ModelArchitecture.HYPERDIMENSIONAL,
-                ModelSpecialization.DOMAIN_EXPERT: ModelArchitecture.SPARSE_MoE,
-                ModelSpecialization.HYBRID_GENERALIST: ModelArchitecture.RECURSIVE_TRANSFORMER
-            }
-        }
-        
-        # Blueprint templates for different specializations
-        self.blueprints = self._load_blueprints()
-        
-        logger.info("Hyperintelligent AI Model Creator initialized")
-    
-    def _load_registry(self) -> Dict[str, Any]:
-        """Load the model registry from disk"""
-        if os.path.exists(self.registry_path):
-            try:
-                with open(self.registry_path, "r") as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.error(f"Error loading model registry: {str(e)}")
-        
-        # Create default registry
-        registry = {
-            "version": "1.0.0",
-            "last_updated": datetime.now().isoformat(),
-            "models": {},
-            "creation_tasks": {}
-        }
-        
-        # Save it
-        self._save_registry(registry)
-        
-        return registry
-    
-    def _save_registry(self, registry: Dict[str, Any] = None) -> None:
-        """Save the model registry to disk"""
-        if registry is None:
-            registry = self.registry
-        
-        # Update last_updated
-        registry["last_updated"] = datetime.now().isoformat()
-        
-        try:
-            with open(self.registry_path, "w") as f:
-                json.dump(registry, f, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving model registry: {str(e)}")
-    
-    def _load_blueprints(self) -> Dict[str, Dict[str, Any]]:
-        """Load model blueprints for different specializations"""
-        # Blueprint templates for architecture design
-        blueprints = {
-            ModelSpecialization.CODE_GENERATION: {
-                "name": "CodeCrafter",
-                "architecture": ModelArchitecture.HYBRID_TRANSFORMER,
-                "description": "Specialized model for high-quality code generation across multiple programming languages",
-                "key_capabilities": [
-                    "Multi-language code generation",
-                    "Algorithm implementation",
-                    "Code completion and refactoring",
-                    "Bug identification and fixing",
-                    "Test generation",
-                    "Documentation generation"
-                ],
-                "training_focus": {
-                    "code_quality": 0.8,
-                    "language_coverage": 0.7,
-                    "contextual_understanding": 0.9,
-                    "algorithmic_efficiency": 0.6
-                },
-                "optimization_targets": [
-                    ModelOptimization.QUANTIZATION,
-                    ModelOptimization.MIXED_PRECISION
-                ],
-                "knowledge_modules": [
-                    "programming_languages",
-                    "algorithms",
-                    "software_design_patterns",
-                    "testing_frameworks",
-                    "documentation_standards"
-                ]
+            ModelArchitecture.RECURSIVE_TRANSFORMER.value: {
+                "name": "Recursive Transformer",
+                "description": "Transformer with recursive computation for improved context handling",
+                "components": ["recursive_attention", "feed_forward", "layer_norm"],
+                "parameters": {
+                    "layers": 8,
+                    "hidden_size": 1024,
+                    "attention_heads": 16,
+                    "recursion_depth": 3,
+                    "max_position_embeddings": 2048
+                }
             },
-            ModelSpecialization.TECHNICAL_REASONING: {
-                "name": "TechReasoner",
-                "architecture": ModelArchitecture.NEURO_SYMBOLIC,
-                "description": "Advanced model for technical reasoning, problem decomposition, and solution strategy formulation",
-                "key_capabilities": [
-                    "Problem decomposition",
-                    "Logical reasoning",
-                    "Technical analysis",
-                    "Solution strategy formulation",
-                    "Constraint satisfaction",
-                    "Algorithmic thinking"
-                ],
-                "training_focus": {
-                    "logical_consistency": 0.9,
-                    "reasoning_depth": 0.8,
-                    "analytical_precision": 0.9,
-                    "problem_solving": 0.7
-                },
-                "optimization_targets": [
-                    ModelOptimization.NEURAL_ARCHITECTURE_SEARCH,
-                    ModelOptimization.HARDWARE_AWARE
-                ],
-                "knowledge_modules": [
-                    "formal_logic",
-                    "problem_solving_strategies",
-                    "systems_thinking",
-                    "technical_domains",
-                    "engineering_principles"
-                ]
+            ModelArchitecture.NEURO_SYMBOLIC.value: {
+                "name": "Neuro-Symbolic Model",
+                "description": "Hybrid architecture combining neural networks with symbolic reasoning",
+                "components": ["neural_encoder", "symbolic_reasoner", "neural_decoder"],
+                "parameters": {
+                    "neural_layers": 6,
+                    "hidden_size": 512,
+                    "reasoning_modules": 4,
+                    "symbol_vocabulary": 10000,
+                    "reasoning_steps": 5
+                }
             },
-            ModelSpecialization.CREATIVE_DESIGN: {
-                "name": "DesignMind",
-                "architecture": ModelArchitecture.NEURAL_STATE_MACHINE,
-                "description": "Creative model for design ideation, UX/UI development, and aesthetic evaluation",
-                "key_capabilities": [
-                    "Design ideation",
-                    "User experience design",
-                    "Interface prototyping",
-                    "Visual aesthetics",
-                    "Information architecture",
-                    "User-centered thinking"
-                ],
-                "training_focus": {
-                    "creative_divergence": 0.9,
-                    "aesthetic_judgment": 0.8,
-                    "user_empathy": 0.9,
-                    "design_principles": 0.7
-                },
-                "optimization_targets": [
-                    ModelOptimization.KNOWLEDGE_DISTILLATION,
-                    ModelOptimization.EVOLUTIONARY
-                ],
-                "knowledge_modules": [
-                    "design_principles",
-                    "human_computer_interaction",
-                    "cognitive_psychology",
-                    "information_architecture",
-                    "visual_design"
-                ]
-            },
-            ModelSpecialization.DATA_ANALYSIS: {
-                "name": "DataSage",
-                "architecture": ModelArchitecture.SPARSE_MoE,
-                "description": "Analytical model for data processing, statistical analysis, and insight generation",
-                "key_capabilities": [
-                    "Statistical analysis",
-                    "Data preprocessing",
-                    "Pattern recognition",
-                    "Insight generation",
-                    "Data visualization recommendation",
-                    "Anomaly detection"
-                ],
-                "training_focus": {
-                    "statistical_reasoning": 0.9,
-                    "data_understanding": 0.8,
-                    "pattern_recognition": 0.9,
-                    "analytical_thoroughness": 0.7
-                },
-                "optimization_targets": [
-                    ModelOptimization.TENSOR_FUSION,
-                    ModelOptimization.PRUNING
-                ],
-                "knowledge_modules": [
-                    "statistics",
-                    "data_science",
-                    "machine_learning",
-                    "data_visualization",
-                    "numerical_methods"
-                ]
-            },
-            ModelSpecialization.MATHEMATICAL_REASONING: {
-                "name": "MathMind",
-                "architecture": ModelArchitecture.NEURO_SYMBOLIC,
-                "description": "Advanced model for mathematical reasoning, proof generation, and equation solving",
-                "key_capabilities": [
-                    "Mathematical proofs",
-                    "Equation solving",
-                    "Numerical computation",
-                    "Symbolic mathematics",
-                    "Geometric reasoning",
-                    "Statistical analysis"
-                ],
-                "training_focus": {
-                    "mathematical_precision": 0.95,
-                    "proof_structure": 0.9,
-                    "symbolic_manipulation": 0.85,
-                    "numerical_computation": 0.8
-                },
-                "optimization_targets": [
-                    ModelOptimization.NEURAL_ARCHITECTURE_SEARCH,
-                    ModelOptimization.QUANTIZATION
-                ],
-                "knowledge_modules": [
-                    "algebra",
-                    "calculus",
-                    "linear_algebra",
-                    "statistics",
-                    "number_theory",
-                    "geometry"
-                ]
-            },
-            ModelSpecialization.SYSTEM_ARCHITECTURE: {
-                "name": "ArchitectMind",
-                "architecture": ModelArchitecture.HYPERDIMENSIONAL,
-                "description": "Holistic model for system design, architecture planning, and infrastructure optimization",
-                "key_capabilities": [
-                    "System architecture design",
-                    "Component integration",
-                    "Scalability planning",
-                    "Performance optimization",
-                    "Security integration",
-                    "Infrastructure design"
-                ],
-                "training_focus": {
-                    "systems_thinking": 0.9,
-                    "integration_knowledge": 0.85,
-                    "technical_breadth": 0.8,
-                    "architectural_patterns": 0.9
-                },
-                "optimization_targets": [
-                    ModelOptimization.KNOWLEDGE_DISTILLATION,
-                    ModelOptimization.HARDWARE_AWARE
-                ],
-                "knowledge_modules": [
-                    "system_design_patterns",
-                    "distributed_systems",
-                    "network_architecture",
-                    "cloud_infrastructure",
-                    "database_systems",
-                    "security_architecture"
-                ]
-            },
-            ModelSpecialization.DOMAIN_EXPERT: {
-                "name": "DomainExpert",
-                "architecture": ModelArchitecture.SPARSE_MoE,
-                "description": "Specialized model with deep expertise in a specific knowledge domain",
-                "key_capabilities": [
-                    "Deep domain knowledge",
-                    "Specialized terminology",
-                    "Domain-specific reasoning",
-                    "Expert-level consultation",
-                    "Domain best practices",
-                    "Knowledge synthesis"
-                ],
-                "training_focus": {
-                    "domain_depth": 0.95,
-                    "knowledge_precision": 0.9,
-                    "contextual_application": 0.8,
-                    "expertise_boundaries": 0.7
-                },
-                "optimization_targets": [
-                    ModelOptimization.KNOWLEDGE_DISTILLATION,
-                    ModelOptimization.PRUNING
-                ],
-                "knowledge_modules": [
-                    "domain_knowledge_base",
-                    "specialized_terminology",
-                    "domain_best_practices",
-                    "domain_historical_context",
-                    "current_advancements"
-                ]
-            },
-            ModelSpecialization.HYBRID_GENERALIST: {
-                "name": "OmniMind",
-                "architecture": ModelArchitecture.RECURSIVE_TRANSFORMER,
-                "description": "Balanced model with strong capabilities across multiple domains while maintaining specialization",
-                "key_capabilities": [
-                    "Multi-domain reasoning",
-                    "Knowledge integration",
-                    "Transferable skills",
-                    "Adaptive problem solving",
-                    "Contextual specialization",
-                    "Generalist capabilities"
-                ],
-                "training_focus": {
-                    "knowledge_breadth": 0.8,
-                    "interdisciplinary_integration": 0.9,
-                    "adaptive_reasoning": 0.85,
-                    "contextual_switching": 0.8
-                },
-                "optimization_targets": [
-                    ModelOptimization.MIXED_PRECISION,
-                    ModelOptimization.NEURAL_ARCHITECTURE_SEARCH
-                ],
-                "knowledge_modules": [
-                    "interdisciplinary_concepts",
-                    "knowledge_integration",
-                    "meta_learning",
-                    "transfer_learning",
-                    "systems_thinking"
-                ]
-            }
-        }
-        
-        return blueprints
-    
-    def create_specialized_model(
-        self,
-        name: str,
-        specialization: str,
-        description: str = "",
-        scale: str = None,
-        domain_knowledge: List[str] = None,
-        custom_capabilities: List[str] = None,
-        optimize_for: List[str] = None,
-        auto_start: bool = False
-    ) -> Union[str, Dict[str, Any]]:
-        """
-        Create a new specialized model
-        
-        Args:
-            name: Name for the model
-            specialization: Type of specialization
-            description: Model description
-            scale: Size/scale of the model
-            domain_knowledge: Domain-specific knowledge areas
-            custom_capabilities: Custom capabilities to include
-            optimize_for: Optimization targets
-            auto_start: Whether to start creation immediately
-            
-        Returns:
-            Task ID if successful, error details if not
-        """
-        # Validate specialization
-        if specialization not in self.blueprints:
-            valid_specializations = list(self.blueprints.keys())
-            logger.error(f"Invalid specialization: {specialization}. Valid options: {valid_specializations}")
-            return {
-                "error": f"Invalid specialization: {specialization}",
-                "valid_specializations": valid_specializations
-            }
-        
-        # Generate task ID
-        task_id = str(uuid.uuid4())
-        
-        # Get blueprint for specialization
-        blueprint = self.blueprints[specialization]
-        
-        # Use or generate model name if not provided
-        if not name or name.strip() == "":
-            name = f"{blueprint['name']}_{task_id[:8]}"
-        
-        # Default scale if not provided
-        if not scale:
-            scale = self.config["default_model_scale"]
-        
-        # Get architecture from specialization
-        architecture = self.config["preferred_architectures"].get(
-            specialization, ModelArchitecture.HYBRID_TRANSFORMER
-        )
-        
-        # Create creation task
-        task = {
-            "id": task_id,
-            "name": name,
-            "specialization": specialization,
-            "description": description or blueprint["description"],
-            "scale": scale,
-            "architecture": architecture,
-            "blueprint": blueprint,
-            "domain_knowledge": domain_knowledge or [],
-            "custom_capabilities": custom_capabilities or [],
-            "optimize_for": optimize_for or blueprint.get("optimization_targets", []),
-            "status": "created",
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
-            "started_at": None,
-            "completed_at": None,
-            "model_id": None,
-            "logs": []
-        }
-        
-        # Add to registry
-        self.registry["creation_tasks"][task_id] = task
-        self._save_registry()
-        
-        logger.info(f"Created specialized model task {task_id} for {name} ({specialization})")
-        
-        # Start creation if requested
-        if auto_start:
-            return self.start_model_creation(task_id)
-        
-        return task_id
-    
-    def start_model_creation(self, task_id: str) -> Union[str, Dict[str, Any]]:
-        """
-        Start a model creation task
-        
-        Args:
-            task_id: ID of the task to start
-            
-        Returns:
-            Task ID if successful, error details if not
-        """
-        # Check if task exists
-        if task_id not in self.registry["creation_tasks"]:
-            logger.error(f"Creation task {task_id} not found")
-            return {
-                "error": "Creation task not found",
-                "task_id": task_id
-            }
-        
-        # Get task info
-        task = self.registry["creation_tasks"][task_id]
-        
-        # Check if already started
-        if task["status"] not in ["created", "failed"]:
-            logger.warning(f"Creation task {task_id} already in status {task['status']}")
-            return {
-                "error": f"Creation task already in status {task['status']}",
-                "task_id": task_id
-            }
-        
-        # Check if we have too many active tasks
-        if len(self.active_tasks) >= self.config["max_parallel_creations"]:
-            logger.warning(f"Too many active creation tasks, limit is {self.config['max_parallel_creations']}")
-            return {
-                "error": "Too many active creation tasks",
-                "task_id": task_id,
-                "active_tasks": len(self.active_tasks)
-            }
-        
-        # Update task status
-        task["status"] = "starting"
-        task["updated_at"] = datetime.now().isoformat()
-        self._save_registry()
-        
-        # Add to the task queue
-        self.task_queue.put(task_id)
-        
-        logger.info(f"Started model creation task {task_id} for {task['name']}")
-        
-        return task_id
-    
-    def _creation_worker(self) -> None:
-        """Worker thread for processing creation tasks"""
-        while True:
-            try:
-                # Get a task from the queue
-                task_id = self.task_queue.get()
-                
-                # Get task info
-                task = self.registry["creation_tasks"].get(task_id)
-                
-                if not task:
-                    logger.error(f"Creation task {task_id} not found")
-                    self.task_queue.task_done()
-                    continue
-                
-                # Add to active tasks
-                self.active_tasks[task_id] = task
-                
-                # Process the task
-                try:
-                    logger.info(f"Processing creation task {task_id} for {task['name']}")
-                    
-                    # Mark as started
-                    task["status"] = "creating"
-                    task["started_at"] = datetime.now().isoformat()
-                    task["updated_at"] = datetime.now().isoformat()
-                    task["logs"].append({
-                        "timestamp": datetime.now().isoformat(),
-                        "level": "info",
-                        "message": f"Model creation started for {task['name']}"
-                    })
-                    self._save_registry()
-                    
-                    # Create the model
-                    model_id, model_info = self._create_specialized_model(task)
-                    
-                    if model_id:
-                        # Update task with success
-                        task["status"] = "completed"
-                        task["completed_at"] = datetime.now().isoformat()
-                        task["model_id"] = model_id
-                        task["logs"].append({
-                            "timestamp": datetime.now().isoformat(),
-                            "level": "info",
-                            "message": f"Model created successfully: {model_id}"
-                        })
-                        
-                        # Add model to registry
-                        self.registry["models"][model_id] = model_info
-                        
-                        logger.info(f"Model creation completed successfully for task {task_id}, created model {model_id}")
-                    else:
-                        # Update task with failure
-                        task["status"] = "failed"
-                        task["error"] = "Failed to create model"
-                        task["logs"].append({
-                            "timestamp": datetime.now().isoformat(),
-                            "level": "error",
-                            "message": "Model creation failed"
-                        })
-                        
-                        logger.error(f"Model creation failed for task {task_id}")
-                    
-                except Exception as e:
-                    logger.error(f"Error processing creation task {task_id}: {str(e)}")
-                    
-                    # Update task with error
-                    task["status"] = "failed"
-                    task["error"] = str(e)
-                    task["logs"].append({
-                        "timestamp": datetime.now().isoformat(),
-                        "level": "error",
-                        "message": f"Error: {str(e)}"
-                    })
-                
-                finally:
-                    # Update task
-                    task["updated_at"] = datetime.now().isoformat()
-                    self._save_registry()
-                    
-                    # Remove from active tasks
-                    if task_id in self.active_tasks:
-                        del self.active_tasks[task_id]
-                    
-                    # Mark task as done
-                    self.task_queue.task_done()
-                
-            except Exception as e:
-                logger.error(f"Error in creation worker: {str(e)}")
-                self.task_queue.task_done()
-    
-    def _create_specialized_model(self, task: Dict[str, Any]) -> Tuple[Optional[str], Dict[str, Any]]:
-        """Create a specialized model based on task specifications"""
-        # In a production environment, this would:
-        # 1. Set up the model architecture based on specialization
-        # 2. Configure model parameters and layers
-        # 3. Initialize weights or load from base model
-        # 4. Apply specialization-specific optimizations
-        # 5. Train or fine-tune the model if needed
-        # 6. Test and validate the model
-        # 7. Package the model for deployment
-        
-        # For now, we'll simulate the process
-        
-        # Log the start of each phase
-        self._log_creation_phase(task, "architecture_design", "Designing optimal neural architecture")
-        time.sleep(1)  # Simulate work
-        
-        self._log_creation_phase(task, "knowledge_integration", "Integrating domain knowledge and capabilities")
-        time.sleep(1)  # Simulate work
-        
-        self._log_creation_phase(task, "specialization_application", "Applying specialization adaptations")
-        time.sleep(1)  # Simulate work
-        
-        self._log_creation_phase(task, "optimization", "Optimizing model for target metrics")
-        time.sleep(1)  # Simulate work
-        
-        self._log_creation_phase(task, "finalization", "Finalizing and packaging model")
-        time.sleep(1)  # Simulate work
-        
-        # Generate model ID
-        model_id = str(uuid.uuid4())
-        
-        # Create model output directory
-        model_dir = os.path.join(self.models_dir, model_id)
-        os.makedirs(model_dir, exist_ok=True)
-        
-        # Create model info
-        model_info = {
-            "id": model_id,
-            "name": task["name"],
-            "description": task["description"],
-            "specialization": task["specialization"],
-            "architecture": task["architecture"],
-            "scale": task["scale"],
-            "parameters": self._estimate_parameter_count(task["scale"], task["architecture"]),
-            "capabilities": self._compile_model_capabilities(task),
-            "creation_task_id": task["id"],
-            "created_at": datetime.now().isoformat(),
-            "status": "available",
-            "path": model_dir,
-            "metadata": {
-                "architecture_details": {
-                    "type": task["architecture"],
-                    "base_models": self.config["base_models"],
-                    "custom_layers": self._get_specialized_layers(task["specialization"])
-                },
-                "optimization": {
-                    "targets": task["optimize_for"],
-                    "techniques": self._get_optimization_techniques(task)
-                },
-                "specialization": {
-                    "type": task["specialization"],
-                    "intensity": self.config["specialization_intensity"],
-                    "knowledge_retention": self.config["knowledge_retention_threshold"],
-                    "domain_knowledge": task["domain_knowledge"],
-                    "custom_capabilities": task["custom_capabilities"]
+            ModelArchitecture.GRAPH_NEURAL.value: {
+                "name": "Graph Neural Network",
+                "description": "Architecture for processing graph-structured data",
+                "components": ["graph_encoder", "message_passing", "graph_pooling"],
+                "parameters": {
+                    "layers": 8,
+                    "node_features": 256,
+                    "message_passing_steps": 6,
+                    "aggregation": "mean",
+                    "update_function": "gru"
                 }
             }
         }
         
-        # Create model config file
-        with open(os.path.join(model_dir, "model_config.json"), "w") as f:
-            json.dump(model_info, f, indent=2)
+        # Optimization templates
+        self.optimization_templates = {
+            ModelOptimization.QUANTIZATION.value: {
+                "name": "Quantization",
+                "description": "Reduce model precision to improve efficiency",
+                "parameters": {
+                    "bits": 8,
+                    "scheme": "symmetric",
+                    "granularity": "per-tensor",
+                    "elements": ["weights", "activations"]
+                }
+            },
+            ModelOptimization.PRUNING.value: {
+                "name": "Weight Pruning",
+                "description": "Remove redundant weights to reduce model size",
+                "parameters": {
+                    "sparsity": 0.7,
+                    "method": "magnitude",
+                    "schedule": "gradual",
+                    "retraining": True
+                }
+            },
+            ModelOptimization.KNOWLEDGE_DISTILLATION.value: {
+                "name": "Knowledge Distillation",
+                "description": "Transfer knowledge from large to small model",
+                "parameters": {
+                    "temperature": 2.0,
+                    "alpha": 0.5,
+                    "matching_layers": True,
+                    "attention_matching": True
+                }
+            }
+        }
         
-        # Create model code file (placeholder)
-        with open(os.path.join(model_dir, "model.py"), "w") as f:
-            f.write(f"""'''
-{task["name"]} - Specialized {task["specialization"]} Model
-
-{task["description"]}
-
-Created: {datetime.now().isoformat()}
-Model ID: {model_id}
-Architecture: {task["architecture"]}
-Scale: {task["scale"]}
-'''
-
-import os
-import json
-import logging
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-class {task["name"].replace(" ", "")}Model:
-    """
-    Specialized {task["specialization"]} Model
-    
-    Architecture: {task["architecture"]}
-    Scale: {task["scale"]}
-    """
-    
-    def __init__(self):
-        """Initialize the model"""
-        self.model_id = "{model_id}"
-        self.name = "{task["name"]}"
-        self.specialization = "{task["specialization"]}"
-        self.initialized = True
-        logger.info(f"Initialized {{self.name}} model")
-    
-    def generate(self, prompt, **kwargs):
-        """Generate a response to the prompt"""
-        # In a real model, this would call the actual model inference
-        logger.info(f"Generating response for prompt: {{prompt[:50]}}")
-        return f"Response from {{self.name}} specialized {{self.specialization}} model"
-    
-    def get_info(self):
-        """Get model information"""
-        return {{
-            "id": self.model_id,
-            "name": self.name,
-            "specialization": self.specialization,
-            "architecture": "{task["architecture"]}",
-            "scale": "{task["scale"]}"
-        }}
-
-# Create model instance
-model = {task["name"].replace(" ", "")}Model()
-
-def get_model():
-    """Get the model instance"""
-    return model
-""")
+        # Statistics
+        self.stats = {
+            "models_created": 0,
+            "models_failed": 0,
+            "architecture_usage": {arch.value: 0 for arch in ModelArchitecture},
+            "optimization_usage": {opt.value: 0 for opt in ModelOptimization}
+        }
         
-        # Create model README
-        with open(os.path.join(model_dir, "README.md"), "w") as f:
-            f.write(f"""# {task["name"]}
+        # Discover existing models
+        self._discover_models()
+        
+        logger.info("Model Creator initialized")
+    
+    def _discover_models(self):
+        """Discover existing models"""
+        # Check models directory
+        if not os.path.exists(self.models_dir):
+            logger.warning(f"Models directory not found: {self.models_dir}")
+            return
+        
+        # Find model manifests
+        for root, dirs, files in os.walk(self.models_dir):
+            for file in files:
+                if file == "manifest.json":
+                    manifest_path = os.path.join(root, file)
+                    try:
+                        with open(manifest_path, "r") as f:
+                            manifest = json.load(f)
+                        
+                        model_id = manifest.get("id")
+                        if not model_id:
+                            logger.warning(f"Model manifest missing ID: {manifest_path}")
+                            continue
+                        
+                        # Register model
+                        self.register_model(
+                            model_id=model_id,
+                            manifest=manifest,
+                            path=os.path.dirname(manifest_path)
+                        )
+                    
+                    except Exception as e:
+                        logger.error(f"Error loading model manifest: {manifest_path} - {str(e)}")
+    
+    def register_model(
+        self,
+        model_id: str,
+        manifest: Dict[str, Any],
+        path: str
+    ) -> bool:
+        """
+        Register a model
+        
+        Args:
+            model_id: Unique model ID
+            manifest: Model manifest
+            path: Path to model files
+            
+        Returns:
+            Success status
+        """
+        # Check if model already registered
+        if model_id in self.models:
+            logger.warning(f"Model already registered: {model_id}")
+            return False
+        
+        # Validate manifest
+        required_fields = ["name", "version", "architecture", "description"]
+        for field in required_fields:
+            if field not in manifest:
+                logger.error(f"Model manifest missing field: {field} - {model_id}")
+                return False
+        
+        # Create model record
+        model = {
+            "id": model_id,
+            "name": manifest["name"],
+            "version": manifest["version"],
+            "architecture": manifest["architecture"],
+            "description": manifest["description"],
+            "parameters": manifest.get("parameters", {}),
+            "optimizations": manifest.get("optimizations", []),
+            "capabilities": manifest.get("capabilities", []),
+            "metrics": manifest.get("metrics", {}),
+            "created_at": manifest.get("created_at", datetime.now().isoformat()),
+            "status": manifest.get("status", ModelStatus.READY.value),
+            "path": path
+        }
+        
+        # Store model
+        self.models[model_id] = model
+        
+        # Update stats if architecture is recognized
+        try:
+            arch = ModelArchitecture(manifest["architecture"])
+            self.stats["architecture_usage"][arch.value] += 1
+        except ValueError:
+            logger.warning(f"Unknown architecture: {manifest['architecture']} - {model_id}")
+        
+        logger.info(f"Model registered: {model_id} - {manifest['name']} {manifest['version']}")
+        
+        return True
+    
+    def create_model(
+        self,
+        name: str,
+        architecture: str,
+        description: str,
+        parameters: Dict[str, Any] = None,
+        optimizations: List[Dict[str, Any]] = None,
+        capabilities: List[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new model
+        
+        Args:
+            name: Model name
+            architecture: Model architecture
+            description: Model description
+            parameters: Architecture parameters
+            optimizations: List of optimizations to apply
+            capabilities: List of model capabilities
+            
+        Returns:
+            Created model details
+        """
+        # Validate architecture
+        try:
+            model_arch = ModelArchitecture(architecture)
+        except ValueError:
+            logger.error(f"Invalid architecture: {architecture}")
+            return {"error": f"Invalid architecture: {architecture}"}
+        
+        # Generate model ID
+        model_id = f"{name.lower().replace(' ', '_')}_{int(time.time())}"
+        
+        # Get architecture template
+        arch_template = self.architecture_templates.get(architecture, {})
+        
+        # Merge parameters with template defaults
+        merged_parameters = {}
+        if arch_template.get("parameters"):
+            merged_parameters.update(arch_template["parameters"])
+        if parameters:
+            merged_parameters.update(parameters)
+        
+        # Validate optimizations
+        validated_optimizations = []
+        if optimizations:
+            for opt in optimizations:
+                opt_type = opt.get("type")
+                if not opt_type:
+                    logger.warning(f"Optimization missing type, skipping")
+                    continue
+                
+                try:
+                    ModelOptimization(opt_type)
+                    validated_optimizations.append(opt)
+                    self.stats["optimization_usage"][opt_type] += 1
+                except ValueError:
+                    logger.warning(f"Invalid optimization type: {opt_type}, skipping")
+        
+        # Create model directory
+        model_dir = os.path.join(self.models_dir, model_id)
+        if os.path.exists(model_dir):
+            return {"error": f"Model directory already exists: {model_dir}"}
+        
+        os.makedirs(model_dir, exist_ok=True)
+        
+        # Create model record
+        model = {
+            "id": model_id,
+            "name": name,
+            "version": "1.0.0",
+            "architecture": architecture,
+            "description": description,
+            "parameters": merged_parameters,
+            "optimizations": validated_optimizations,
+            "capabilities": capabilities or [],
+            "metrics": {},
+            "created_at": datetime.now().isoformat(),
+            "status": ModelStatus.DESIGNING.value,
+            "path": model_dir
+        }
+        
+        # Create manifest file
+        manifest_path = os.path.join(model_dir, "manifest.json")
+        with open(manifest_path, "w") as f:
+            json.dump(model, f, indent=2)
+        
+        # Create architecture file
+        architecture_path = os.path.join(model_dir, "architecture.json")
+        architecture_data = {
+            "name": name,
+            "type": architecture,
+            "components": arch_template.get("components", []),
+            "parameters": merged_parameters,
+            "optimizations": validated_optimizations
+        }
+        with open(architecture_path, "w") as f:
+            json.dump(architecture_data, f, indent=2)
+        
+        # Create README file
+        readme_path = os.path.join(model_dir, "README.md")
+        with open(readme_path, "w") as f:
+            f.write(f"""# {name}
 
-{task["description"]}
+{description}
 
-## Specialization
+## Architecture
 
-This model is specialized for **{task["specialization"]}** tasks with a **{task["architecture"]}** architecture at **{task["scale"]}** scale.
+This model uses the {arch_template.get('name', architecture)} architecture.
+
+{arch_template.get('description', '')}
+
+## Parameters
+
+```json
+{json.dumps(merged_parameters, indent=2)}
+```
+
+## Optimizations
+
+{', '.join([opt.get('type', 'Unknown') for opt in validated_optimizations]) if validated_optimizations else 'None'}
 
 ## Capabilities
 
-{self._format_capabilities_for_readme(task)}
+{', '.join(capabilities or [])}
 
-## Usage
+## Created
 
-```python
-from {model_dir.split('/')[-1]} import model
-
-# Generate response
-response = model.generate("Your prompt here")
-print(response)
-```
-
-## Model Information
-
-- **ID:** {model_id}
-- **Created:** {datetime.now().isoformat()}
-- **Parameters:** {model_info["parameters"]:,}
-- **Architecture:** {task["architecture"]}
-- **Scale:** {task["scale"]}
-- **Specialization:** {task["specialization"]}
+{datetime.now().isoformat()}
 """)
         
-        return model_id, model_info
-    
-    def _format_capabilities_for_readme(self, task: Dict[str, Any]) -> str:
-        """Format capabilities list for README file"""
-        capabilities = task["blueprint"]["key_capabilities"]
-        if task["custom_capabilities"]:
-            capabilities.extend(task["custom_capabilities"])
+        # Start building the model in the background
+        threading.Thread(target=self._build_model, args=(model_id,)).start()
         
-        return "\n".join([f"- {capability}" for capability in capabilities])
-    
-    def _log_creation_phase(self, task: Dict[str, Any], phase: str, message: str) -> None:
-        """Log a creation phase to the task logs"""
-        task["logs"].append({
-            "timestamp": datetime.now().isoformat(),
-            "level": "info",
-            "phase": phase,
-            "message": message
-        })
-        self._save_registry()
-        
-        logger.info(f"Task {task['id']} - Phase {phase}: {message}")
-    
-    def _estimate_parameter_count(self, scale: str, architecture: str) -> int:
-        """Estimate parameter count based on scale and architecture"""
-        base_params = {
-            ModelScale.SMALL: 2 * (10**9),  # 2B
-            ModelScale.MEDIUM: 7 * (10**9),  # 7B
-            ModelScale.LARGE: 35 * (10**9),  # 35B
-            ModelScale.XLARGE: 120 * (10**9)  # 120B
-        }
-        
-        # Architecture multipliers
-        arch_multiplier = {
-            ModelArchitecture.HYBRID_TRANSFORMER: 1.0,
-            ModelArchitecture.SPARSE_MoE: 1.5,  # MoE has more parameters but same compute
-            ModelArchitecture.NEURAL_STATE_MACHINE: 0.8,
-            ModelArchitecture.RECURSIVE_TRANSFORMER: 1.2,
-            ModelArchitecture.HYPERDIMENSIONAL: 0.9,
-            ModelArchitecture.QUANTUM_NEURAL: 0.7,
-            ModelArchitecture.SPIKING_NEURAL: 0.8,
-            ModelArchitecture.NEURO_SYMBOLIC: 0.9
-        }
-        
-        base = base_params.get(scale, base_params[ModelScale.MEDIUM])
-        multiplier = arch_multiplier.get(architecture, 1.0)
-        
-        return int(base * multiplier)
-    
-    def _compile_model_capabilities(self, task: Dict[str, Any]) -> List[str]:
-        """Compile the model's capabilities"""
-        capabilities = []
-        
-        # Add blueprint capabilities
-        capabilities.extend(task["blueprint"]["key_capabilities"])
-        
-        # Add custom capabilities
-        if task["custom_capabilities"]:
-            capabilities.extend(task["custom_capabilities"])
-        
-        # Add scale-specific capabilities
-        if task["scale"] == ModelScale.LARGE or task["scale"] == ModelScale.XLARGE:
-            capabilities.append("Advanced reasoning")
-            capabilities.append("Complex task handling")
-            capabilities.append("Enhanced contextual understanding")
-        
-        # Add architecture-specific capabilities
-        if task["architecture"] == ModelArchitecture.NEURO_SYMBOLIC:
-            capabilities.append("Explicit reasoning steps")
-            capabilities.append("Logical rule application")
-            capabilities.append("Knowledge verification")
-        
-        elif task["architecture"] == ModelArchitecture.SPARSE_MoE:
-            capabilities.append("Multidomain expertise")
-            capabilities.append("Specialized routing")
-            capabilities.append("Efficient knowledge partitioning")
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_capabilities = []
-        for capability in capabilities:
-            if capability not in seen:
-                seen.add(capability)
-                unique_capabilities.append(capability)
-        
-        return unique_capabilities
-    
-    def _get_specialized_layers(self, specialization: str) -> List[str]:
-        """Get specialized neural layers for a given specialization"""
-        # Custom layers for different specializations
-        specialized_layers = {
-            ModelSpecialization.CODE_GENERATION: [
-                "SyntaxAwareAttention",
-                "TokenTypeEmbedding",
-                "LanguageSpecificDecoder"
-            ],
-            ModelSpecialization.TECHNICAL_REASONING: [
-                "LogicalReasoningLayer",
-                "GraphPropagationLayer",
-                "DeductiveInferenceLayer"
-            ],
-            ModelSpecialization.CREATIVE_DESIGN: [
-                "DivergentThinkingLayer",
-                "AestheticEvaluationLayer",
-                "ConceptualBlendingLayer"
-            ],
-            ModelSpecialization.DATA_ANALYSIS: [
-                "StatisticalInferenceLayer",
-                "DataPatternRecognition",
-                "NumericalProcessingLayer"
-            ],
-            ModelSpecialization.MATHEMATICAL_REASONING: [
-                "SymbolicManipulationLayer",
-                "MathematicalReasoningLayer",
-                "ProofConstructionLayer"
-            ],
-            ModelSpecialization.SYSTEM_ARCHITECTURE: [
-                "SystemComponentLayer",
-                "IntegrationReasoningLayer",
-                "ArchitecturalPatternLayer"
-            ],
-            ModelSpecialization.DOMAIN_EXPERT: [
-                "KnowledgeEncodingLayer",
-                "DomainSpecificAttention",
-                "TerminologyProcessingLayer"
-            ],
-            ModelSpecialization.HYBRID_GENERALIST: [
-                "MultiDomainFusionLayer",
-                "AdaptiveContextLayer",
-                "CrossDomainMappingLayer"
-            ]
-        }
-        
-        # Return layers for the given specialization or empty list if not found
-        return specialized_layers.get(specialization, [])
-    
-    def _get_optimization_techniques(self, task: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Get optimization techniques based on task specifications"""
-        techniques = []
-        
-        # Add techniques based on specified optimization targets
-        for target in task["optimize_for"]:
-            if target == ModelOptimization.QUANTIZATION:
-                techniques.append({
-                    "name": "Mixed-Precision Quantization",
-                    "description": "8-bit quantization for weights, 16-bit for activations",
-                    "target": "model_size",
-                    "impact": "75% size reduction with minimal accuracy loss"
-                })
-            
-            elif target == ModelOptimization.PRUNING:
-                techniques.append({
-                    "name": "Structured Pruning",
-                    "description": "Channel-wise pruning of less important neurons",
-                    "target": "inference_speed",
-                    "impact": "40% speed increase with 2-3% accuracy loss"
-                })
-            
-            elif target == ModelOptimization.NEURAL_ARCHITECTURE_SEARCH:
-                techniques.append({
-                    "name": "Evolutionary Architecture Search",
-                    "description": "Optimized architecture using genetic algorithms",
-                    "target": "performance_efficiency",
-                    "impact": "Task-specific optimization with 15% better performance"
-                })
-            
-            elif target == ModelOptimization.KNOWLEDGE_DISTILLATION:
-                techniques.append({
-                    "name": "Targeted Knowledge Distillation",
-                    "description": "Distilled knowledge from multiple teacher models",
-                    "target": "specialized_capabilities",
-                    "impact": "Specialized performance approaching larger models"
-                })
-            
-            elif target == ModelOptimization.MIXED_PRECISION:
-                techniques.append({
-                    "name": "Adaptive Mixed Precision",
-                    "description": "Dynamic precision allocation based on layer importance",
-                    "target": "efficiency",
-                    "impact": "30% faster with negligible accuracy impact"
-                })
-            
-            elif target == ModelOptimization.TENSOR_FUSION:
-                techniques.append({
-                    "name": "Multi-Tensor Fusion",
-                    "description": "Optimized tensor operations for hardware acceleration",
-                    "target": "throughput",
-                    "impact": "2x inference throughput on targeted hardware"
-                })
-            
-            elif target == ModelOptimization.HARDWARE_AWARE:
-                techniques.append({
-                    "name": "Hardware-Aware Optimization",
-                    "description": "Layer operations optimized for specific hardware targets",
-                    "target": "deployment_efficiency",
-                    "impact": "3x better performance on targeted hardware"
-                })
-            
-            elif target == ModelOptimization.EVOLUTIONARY:
-                techniques.append({
-                    "name": "Capability-Targeted Evolution",
-                    "description": "Evolutionary optimization of model components for key capabilities",
-                    "target": "task_performance",
-                    "impact": "Task-specific performance improved by 25%"
-                })
-        
-        # Add specialization-specific techniques
-        if task["specialization"] == ModelSpecialization.CODE_GENERATION:
-            techniques.append({
-                "name": "Syntax Tree Optimization",
-                "description": "Optimized processing of abstract syntax trees",
-                "target": "code_quality",
-                "impact": "30% higher syntactic correctness rate"
-            })
-        
-        elif task["specialization"] == ModelSpecialization.TECHNICAL_REASONING:
-            techniques.append({
-                "name": "Logical Consistency Enhancement",
-                "description": "Enhanced reasoning pathways for logical consistency",
-                "target": "reasoning_quality",
-                "impact": "45% reduction in logical contradictions"
-            })
-        
-        return techniques
-    
-    def get_creation_status(self, task_id: str) -> Dict[str, Any]:
-        """
-        Get status of a model creation task
-        
-        Args:
-            task_id: ID of the task
-            
-        Returns:
-            Task status
-        """
-        # Check if task exists
-        if task_id not in self.registry["creation_tasks"]:
-            logger.warning(f"Creation task {task_id} not found")
-            return {
-                "success": False,
-                "error": "Creation task not found",
-                "task_id": task_id
-            }
-        
-        # Get task info
-        task = self.registry["creation_tasks"][task_id]
-        
-        # Get basic status info
-        status_info = {
-            "task_id": task_id,
-            "name": task["name"],
-            "status": task["status"],
-            "created_at": task["created_at"],
-            "updated_at": task["updated_at"],
-            "started_at": task.get("started_at"),
-            "completed_at": task.get("completed_at"),
-            "model_id": task.get("model_id"),
-            "specialization": task["specialization"],
-            "architecture": task["architecture"],
-            "scale": task["scale"]
-        }
-        
-        # Add error if failed
-        if task["status"] == "failed" and "error" in task:
-            status_info["error"] = task["error"]
-        
-        # Add recent logs
-        status_info["recent_logs"] = task["logs"][-10:] if task["logs"] else []
-        
-        # Add model info if available
-        if task.get("model_id") and task["model_id"] in self.registry["models"]:
-            model = self.registry["models"][task["model_id"]]
-            status_info["model"] = {
-                "id": model["id"],
-                "name": model["name"],
-                "architecture": model["architecture"],
-                "parameters": model["parameters"],
-                "capabilities": model["capabilities"][:5]  # Just show first few
-            }
-        
-        return status_info
-    
-    def list_creation_tasks(
-        self,
-        status: Optional[str] = None,
-        specialization: Optional[str] = None,
-        limit: int = 10
-    ) -> List[Dict[str, Any]]:
-        """
-        List model creation tasks
-        
-        Args:
-            status: Filter by status
-            specialization: Filter by specialization
-            limit: Maximum number of tasks to return
-            
-        Returns:
-            List of tasks
-        """
-        tasks = []
-        
-        # Get all tasks, sorted by creation time (newest first)
-        sorted_tasks = sorted(
-            self.registry["creation_tasks"].values(),
-            key=lambda t: t["created_at"],
-            reverse=True
+        # Register the model
+        self.register_model(
+            model_id=model_id,
+            manifest=model,
+            path=model_dir
         )
         
-        # Apply filters
-        for task in sorted_tasks:
-            if status and task["status"] != status:
-                continue
-            
-            if specialization and task["specialization"] != specialization:
-                continue
-            
-            # Add basic info
-            tasks.append({
-                "id": task["id"],
-                "name": task["name"],
-                "status": task["status"],
-                "created_at": task["created_at"],
-                "updated_at": task["updated_at"],
-                "started_at": task.get("started_at"),
-                "completed_at": task.get("completed_at"),
-                "model_id": task.get("model_id"),
-                "specialization": task["specialization"],
-                "architecture": task["architecture"],
-                "scale": task["scale"]
-            })
-            
-            # Apply limit
-            if len(tasks) >= limit:
-                break
-        
-        return tasks
-    
-    def get_model_info(self, model_id: str) -> Dict[str, Any]:
-        """
-        Get information about a specialized model
-        
-        Args:
-            model_id: ID of the model
-            
-        Returns:
-            Model information
-        """
-        # Check if model exists
-        if model_id not in self.registry["models"]:
-            logger.warning(f"Model {model_id} not found")
-            return {
-                "success": False,
-                "error": "Model not found",
-                "model_id": model_id
+        # Update creation history
+        self.creation_history.append({
+            "model_id": model_id,
+            "timestamp": datetime.now().isoformat(),
+            "parameters": {
+                "name": name,
+                "architecture": architecture,
+                "optimizations": [opt.get("type") for opt in validated_optimizations]
             }
+        })
         
-        # Get model info
-        model = self.registry["models"][model_id]
+        # Update stats
+        self.stats["models_created"] += 1
+        self.stats["architecture_usage"][architecture] += 1
         
-        # Get related creation task
-        task_id = model.get("creation_task_id")
-        task = None
-        if task_id and task_id in self.registry["creation_tasks"]:
-            task = self.registry["creation_tasks"][task_id]
+        logger.info(f"Model creation started: {model_id}")
         
-        # Return model info
-        return {
-            "id": model["id"],
-            "name": model["name"],
-            "description": model["description"],
-            "specialization": model["specialization"],
-            "architecture": model["architecture"],
-            "scale": model["scale"],
-            "parameters": model["parameters"],
-            "capabilities": model["capabilities"],
-            "created_at": model["created_at"],
-            "status": model["status"],
-            "path": model["path"],
-            "metadata": model["metadata"],
-            "creation_task_id": task_id,
-            "creation_task": {
-                "status": task["status"],
-                "created_at": task["created_at"],
-                "completed_at": task.get("completed_at")
-            } if task else None
-        }
+        return model
     
-    def list_models(
-        self,
-        specialization: Optional[str] = None,
-        architecture: Optional[str] = None,
-        scale: Optional[str] = None,
-        limit: int = 10
-    ) -> List[Dict[str, Any]]:
+    def _build_model(self, model_id: str) -> None:
         """
-        List specialized models
+        Build a model
         
         Args:
-            specialization: Filter by specialization
+            model_id: ID of the model to build
+        """
+        # Get the model
+        model = self.models.get(model_id)
+        
+        if not model:
+            logger.error(f"Model not found: {model_id}")
+            return
+        
+        # Add to active sessions
+        self.active_sessions.add(model_id)
+        
+        try:
+            # Update status
+            model["status"] = ModelStatus.BUILDING.value
+            self._update_model_manifest(model_id)
+            
+            # In a real implementation, this would perform actual model building
+            # Here we just simulate the process
+            
+            # Simulate build time
+            time.sleep(3)
+            
+            # Create model code file (Python example)
+            model_code_path = os.path.join(model["path"], "model.py")
+            with open(model_code_path, "w") as f:
+                f.write(self._generate_model_code(model))
+            
+            # Update status
+            model["status"] = ModelStatus.VALIDATING.value
+            self._update_model_manifest(model_id)
+            
+            # Simulate validation
+            time.sleep(2)
+            
+            # Add some metrics
+            model["metrics"] = {
+                "parameters": self._calculate_parameters(model),
+                "memory_usage": self._estimate_memory_usage(model),
+                "inference_time": self._estimate_inference_time(model),
+                "validated_at": datetime.now().isoformat()
+            }
+            
+            # Update status
+            model["status"] = ModelStatus.READY.value
+            self._update_model_manifest(model_id)
+            
+            logger.info(f"Model built successfully: {model_id}")
+        
+        except Exception as e:
+            logger.error(f"Error building model {model_id}: {str(e)}")
+            
+            # Update status
+            model["status"] = ModelStatus.FAILED.value
+            self._update_model_manifest(model_id)
+            
+            # Update stats
+            self.stats["models_failed"] += 1
+        
+        finally:
+            # Remove from active sessions
+            self.active_sessions.discard(model_id)
+    
+    def _update_model_manifest(self, model_id: str) -> None:
+        """Update model manifest file"""
+        model = self.models.get(model_id)
+        
+        if not model:
+            return
+        
+        # Update manifest file
+        manifest_path = os.path.join(model["path"], "manifest.json")
+        with open(manifest_path, "w") as f:
+            json.dump(model, f, indent=2)
+    
+    def _generate_model_code(self, model: Dict[str, Any]) -> str:
+        """Generate code for a model"""
+        architecture = model["architecture"]
+        name = model["name"]
+        params = model["parameters"]
+        
+        # Get Python code template based on architecture
+        if architecture == ModelArchitecture.TRANSFORMER.value:
+            return self._generate_transformer_code(name, params)
+        elif architecture == ModelArchitecture.NEURO_SYMBOLIC.value:
+            return self._generate_neuro_symbolic_code(name, params)
+        elif architecture == ModelArchitecture.GRAPH_NEURAL.value:
+            return self._generate_graph_neural_code(name, params)
+        else:
+            # Generic template
+            return f"""
+import torch
+import torch.nn as nn
+
+class {name.replace(' ', '')}(nn.Module):
+    \"\"\"
+    {model['description']}
+    
+    Architecture: {architecture}
+    \"\"\"
+    
+    def __init__(self):
+        super().__init__()
+        # Architecture parameters
+        {self._format_params_as_code(params)}
+        
+        # Initialize model components
+        self.build_model()
+    
+    def build_model(self):
+        # Model architecture would be defined here
+        pass
+    
+    def forward(self, x):
+        # Forward pass would be defined here
+        return x
+    
+    def get_info(self):
+        return {{
+            "name": "{name}",
+            "architecture": "{architecture}",
+            "parameters": {params}
+        }}
+"""
+    
+    def _generate_transformer_code(self, name: str, params: Dict[str, Any]) -> str:
+        """Generate code for a transformer model"""
+        return f"""
+import torch
+import torch.nn as nn
+
+class {name.replace(' ', '')}(nn.Module):
+    \"\"\"
+    Transformer-based model
+    \"\"\"
+    
+    def __init__(self):
+        super().__init__()
+        # Architecture parameters
+        self.layers = {params.get('layers', 12)}
+        self.hidden_size = {params.get('hidden_size', 768)}
+        self.attention_heads = {params.get('attention_heads', 12)}
+        self.intermediate_size = {params.get('intermediate_size', 3072)}
+        self.max_position_embeddings = {params.get('max_position_embeddings', 512)}
+        
+        # Embeddings
+        self.token_embeddings = nn.Embedding(30000, self.hidden_size)
+        self.position_embeddings = nn.Embedding(self.max_position_embeddings, self.hidden_size)
+        self.layer_norm = nn.LayerNorm(self.hidden_size)
+        self.dropout = nn.Dropout(0.1)
+        
+        # Transformer layers
+        self.layers = nn.ModuleList([
+            TransformerLayer(self.hidden_size, self.attention_heads, self.intermediate_size)
+            for _ in range(self.layers)
+        ])
+        
+        # Output
+        self.output_layer = nn.Linear(self.hidden_size, 30000)
+    
+    def forward(self, input_ids, attention_mask=None):
+        batch_size, seq_length = input_ids.size()
+        
+        # Create position IDs
+        position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)
+        position_ids = position_ids.unsqueeze(0).expand(batch_size, seq_length)
+        
+        # Embeddings
+        token_embeds = self.token_embeddings(input_ids)
+        position_embeds = self.position_embeddings(position_ids)
+        
+        # Combined embeddings
+        embeddings = token_embeds + position_embeds
+        embeddings = self.layer_norm(embeddings)
+        embeddings = self.dropout(embeddings)
+        
+        # Transformer layers
+        hidden_states = embeddings
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, attention_mask)
+        
+        # Output
+        logits = self.output_layer(hidden_states)
+        
+        return logits
+        
+class TransformerLayer(nn.Module):
+    def __init__(self, hidden_size, attention_heads, intermediate_size):
+        super().__init__()
+        self.attention = MultiHeadAttention(hidden_size, attention_heads)
+        self.attention_ln = nn.LayerNorm(hidden_size)
+        self.intermediate = nn.Sequential(
+            nn.Linear(hidden_size, intermediate_size),
+            nn.GELU(),
+            nn.Linear(intermediate_size, hidden_size),
+        )
+        self.intermediate_ln = nn.LayerNorm(hidden_size)
+    
+    def forward(self, hidden_states, attention_mask=None):
+        # Self-attention
+        attn_output = self.attention(hidden_states, attention_mask)
+        hidden_states = self.attention_ln(hidden_states + attn_output)
+        
+        # Feed-forward
+        ff_output = self.intermediate(hidden_states)
+        hidden_states = self.intermediate_ln(hidden_states + ff_output)
+        
+        return hidden_states
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, hidden_size, num_heads):
+        super().__init__()
+        self.num_heads = num_heads
+        self.head_size = hidden_size // num_heads
+        self.all_head_size = self.num_heads * self.head_size
+        
+        self.query = nn.Linear(hidden_size, self.all_head_size)
+        self.key = nn.Linear(hidden_size, self.all_head_size)
+        self.value = nn.Linear(hidden_size, self.all_head_size)
+        self.output = nn.Linear(hidden_size, hidden_size)
+    
+    def forward(self, hidden_states, attention_mask=None):
+        batch_size, seq_length, _ = hidden_states.size()
+        
+        # Project query, key, value
+        q = self.query(hidden_states)
+        k = self.key(hidden_states)
+        v = self.value(hidden_states)
+        
+        # Reshape for multi-head attention
+        q = q.view(batch_size, seq_length, self.num_heads, self.head_size).transpose(1, 2)
+        k = k.view(batch_size, seq_length, self.num_heads, self.head_size).transpose(1, 2)
+        v = v.view(batch_size, seq_length, self.num_heads, self.head_size).transpose(1, 2)
+        
+        # Compute attention scores
+        scores = torch.matmul(q, k.transpose(-1, -2)) / (self.head_size ** 0.5)
+        
+        if attention_mask is not None:
+            scores = scores + attention_mask
+        
+        # Apply softmax
+        attn_weights = torch.softmax(scores, dim=-1)
+        
+        # Apply attention to values
+        context = torch.matmul(attn_weights, v)
+        
+        # Reshape back
+        context = context.transpose(1, 2).contiguous().view(batch_size, seq_length, self.all_head_size)
+        
+        # Output projection
+        output = self.output(context)
+        
+        return output
+"""
+    
+    def _generate_neuro_symbolic_code(self, name: str, params: Dict[str, Any]) -> str:
+        """Generate code for a neuro-symbolic model"""
+        return f"""
+import torch
+import torch.nn as nn
+
+class {name.replace(' ', '')}(nn.Module):
+    \"\"\"
+    Neuro-Symbolic Model
+    
+    Combines neural networks with symbolic reasoning.
+    \"\"\"
+    
+    def __init__(self):
+        super().__init__()
+        # Architecture parameters
+        self.neural_layers = {params.get('neural_layers', 6)}
+        self.hidden_size = {params.get('hidden_size', 512)}
+        self.reasoning_modules = {params.get('reasoning_modules', 4)}
+        self.symbol_vocabulary = {params.get('symbol_vocabulary', 10000)}
+        self.reasoning_steps = {params.get('reasoning_steps', 5)}
+        
+        # Neural encoder
+        self.encoder_layers = nn.ModuleList([
+            EncoderLayer(self.hidden_size)
+            for _ in range(self.neural_layers)
+        ])
+        
+        # Symbolic reasoner
+        self.reasoner = SymbolicReasoner(
+            self.hidden_size, 
+            self.reasoning_modules,
+            self.reasoning_steps
+        )
+        
+        # Neural decoder
+        self.decoder_layers = nn.ModuleList([
+            DecoderLayer(self.hidden_size)
+            for _ in range(self.neural_layers)
+        ])
+        
+        # Symbol embedding
+        self.symbol_embeddings = nn.Embedding(self.symbol_vocabulary, self.hidden_size)
+        
+        # Output layer
+        self.output_layer = nn.Linear(self.hidden_size, self.symbol_vocabulary)
+    
+    def forward(self, input_ids):
+        # Neural encoding
+        embeddings = self.symbol_embeddings(input_ids)
+        encoder_states = embeddings
+        
+        for layer in self.encoder_layers:
+            encoder_states = layer(encoder_states)
+        
+        # Symbolic reasoning
+        reasoner_states = self.reasoner(encoder_states)
+        
+        # Neural decoding
+        decoder_states = reasoner_states
+        
+        for layer in self.decoder_layers:
+            decoder_states = layer(decoder_states)
+        
+        # Output projection
+        logits = self.output_layer(decoder_states)
+        
+        return logits
+
+class EncoderLayer(nn.Module):
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.self_attention = nn.MultiheadAttention(hidden_size, num_heads=8)
+        self.norm1 = nn.LayerNorm(hidden_size)
+        self.ffn = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size * 4),
+            nn.ReLU(),
+            nn.Linear(hidden_size * 4, hidden_size)
+        )
+        self.norm2 = nn.LayerNorm(hidden_size)
+    
+    def forward(self, x):
+        # Self attention
+        attn_output, _ = self.self_attention(x, x, x)
+        x = self.norm1(x + attn_output)
+        
+        # Feed forward
+        ffn_output = self.ffn(x)
+        x = self.norm2(x + ffn_output)
+        
+        return x
+
+class SymbolicReasoner(nn.Module):
+    def __init__(self, hidden_size, num_modules, steps):
+        super().__init__()
+        self.steps = steps
+        self.modules = nn.ModuleList([
+            ReasoningModule(hidden_size)
+            for _ in range(num_modules)
+        ])
+    
+    def forward(self, x):
+        # Apply reasoning steps
+        for _ in range(self.steps):
+            for module in self.modules:
+                x = module(x)
+        return x
+
+class ReasoningModule(nn.Module):
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.rule_network = nn.Linear(hidden_size, hidden_size)
+        self.gate = nn.Sequential(
+            nn.Linear(hidden_size * 2, hidden_size),
+            nn.Sigmoid()
+        )
+    
+    def forward(self, x):
+        # Apply symbolic rule
+        rule_output = self.rule_network(x)
+        
+        # Gating mechanism
+        gate_input = torch.cat([x, rule_output], dim=-1)
+        gate = self.gate(gate_input)
+        
+        # Apply gate
+        output = gate * rule_output + (1 - gate) * x
+        
+        return output
+
+class DecoderLayer(nn.Module):
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.self_attention = nn.MultiheadAttention(hidden_size, num_heads=8)
+        self.norm1 = nn.LayerNorm(hidden_size)
+        self.ffn = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size * 4),
+            nn.ReLU(),
+            nn.Linear(hidden_size * 4, hidden_size)
+        )
+        self.norm2 = nn.LayerNorm(hidden_size)
+    
+    def forward(self, x):
+        # Self attention
+        attn_output, _ = self.self_attention(x, x, x)
+        x = self.norm1(x + attn_output)
+        
+        # Feed forward
+        ffn_output = self.ffn(x)
+        x = self.norm2(x + ffn_output)
+        
+        return x
+"""
+    
+    def _generate_graph_neural_code(self, name: str, params: Dict[str, Any]) -> str:
+        """Generate code for a graph neural network"""
+        return f"""
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class {name.replace(' ', '')}(nn.Module):
+    \"\"\"
+    Graph Neural Network
+    
+    Processes graph-structured data through message passing.
+    \"\"\"
+    
+    def __init__(self):
+        super().__init__()
+        # Architecture parameters
+        self.layers = {params.get('layers', 8)}
+        self.node_features = {params.get('node_features', 256)}
+        self.message_passing_steps = {params.get('message_passing_steps', 6)}
+        self.aggregation = "{params.get('aggregation', 'mean')}"
+        self.update_function = "{params.get('update_function', 'gru')}"
+        
+        # Node embedding
+        self.node_embedding = nn.Linear(self.node_features, self.node_features)
+        
+        # Message passing layers
+        self.message_layers = nn.ModuleList([
+            MessagePassingLayer(self.node_features, self.update_function)
+            for _ in range(self.message_passing_steps)
+        ])
+        
+        # Graph readout (pooling)
+        self.graph_readout = GraphPooling(self.node_features, self.aggregation)
+        
+        # Output layers
+        self.output_layers = nn.Sequential(
+            nn.Linear(self.node_features, self.node_features),
+            nn.ReLU(),
+            nn.Linear(self.node_features, self.node_features // 2),
+            nn.ReLU(),
+            nn.Linear(self.node_features // 2, 1)
+        )
+    
+    def forward(self, node_features, edge_index, batch=None):
+        # Node embedding
+        x = self.node_embedding(node_features)
+        
+        # Message passing
+        for layer in self.message_layers:
+            x = layer(x, edge_index)
+        
+        # Graph pooling
+        pooled = self.graph_readout(x, batch)
+        
+        # Output prediction
+        output = self.output_layers(pooled)
+        
+        return output
+
+class MessagePassingLayer(nn.Module):
+    def __init__(self, node_features, update_fn='gru'):
+        super().__init__()
+        self.node_features = node_features
+        self.update_fn = update_fn
+        
+        # Message computation
+        self.message_mlp = nn.Sequential(
+            nn.Linear(node_features * 2, node_features),
+            nn.ReLU(),
+            nn.Linear(node_features, node_features)
+        )
+        
+        # Node update
+        if update_fn == 'gru':
+            self.update = nn.GRUCell(node_features, node_features)
+        else:
+            self.update = nn.Sequential(
+                nn.Linear(node_features * 2, node_features),
+                nn.ReLU(),
+                nn.Linear(node_features, node_features)
+            )
+    
+    def forward(self, x, edge_index):
+        # Compute messages
+        messages = []
+        for src, dst in edge_index.t():
+            src_feat = x[src]
+            dst_feat = x[dst]
+            message_input = torch.cat([src_feat, dst_feat], dim=-1)
+            message = self.message_mlp(message_input)
+            messages.append((dst.item(), message))
+        
+        # Aggregate messages
+        aggregated = torch.zeros_like(x)
+        counts = torch.zeros(x.size(0), device=x.device)
+        
+        for dst, message in messages:
+            aggregated[dst] += message
+            counts[dst] += 1
+        
+        # Normalize by count
+        mask = counts > 0
+        aggregated[mask] = aggregated[mask] / counts[mask].unsqueeze(1)
+        
+        # Update nodes
+        if self.update_fn == 'gru':
+            # GRU update
+            new_x = torch.zeros_like(x)
+            for i in range(x.size(0)):
+                new_x[i] = self.update(aggregated[i].unsqueeze(0), x[i].unsqueeze(0))
+        else:
+            # MLP update
+            update_input = torch.cat([x, aggregated], dim=-1)
+            new_x = self.update(update_input)
+        
+        return new_x
+
+class GraphPooling(nn.Module):
+    def __init__(self, node_features, aggregation='mean'):
+        super().__init__()
+        self.node_features = node_features
+        self.aggregation = aggregation
+        
+        if aggregation == 'attention':
+            self.attention = nn.Sequential(
+                nn.Linear(node_features, node_features),
+                nn.Tanh(),
+                nn.Linear(node_features, 1)
+            )
+    
+    def forward(self, x, batch):
+        if batch is None:
+            batch = torch.zeros(x.size(0), dtype=torch.long, device=x.device)
+        
+        num_graphs = batch.max().item() + 1
+        
+        if self.aggregation == 'mean':
+            # Mean pooling
+            output = torch.zeros(num_graphs, self.node_features, device=x.device)
+            counts = torch.zeros(num_graphs, device=x.device)
+            
+            for i, b in enumerate(batch):
+                output[b] += x[i]
+                counts[b] += 1
+            
+            output = output / counts.unsqueeze(1)
+            
+        elif self.aggregation == 'max':
+            # Max pooling
+            output = torch.zeros(num_graphs, self.node_features, device=x.device)
+            output = output - 1e9  # Initialize with very small value
+            
+            for i, b in enumerate(batch):
+                output[b] = torch.max(output[b], x[i])
+                
+        elif self.aggregation == 'attention':
+            # Attention pooling
+            weights = self.attention(x).squeeze(-1)
+            weights = torch.softmax(weights, dim=0)
+            
+            output = torch.zeros(num_graphs, self.node_features, device=x.device)
+            
+            for i, b in enumerate(batch):
+                output[b] += weights[i] * x[i]
+                
+        else:
+            raise ValueError(f"Unknown aggregation: {self.aggregation}")
+            
+        return output
+"""
+    
+    def _format_params_as_code(self, params: Dict[str, Any]) -> str:
+        """Format parameters as Python code"""
+        lines = []
+        for key, value in params.items():
+            if isinstance(value, str):
+                lines.append(f'self.{key} = "{value}"')
+            else:
+                lines.append(f'self.{key} = {value}')
+        return '\n        '.join(lines)
+    
+    def _calculate_parameters(self, model: Dict[str, Any]) -> int:
+        """Estimate the number of parameters"""
+        architecture = model["architecture"]
+        params = model["parameters"]
+        
+        if architecture == ModelArchitecture.TRANSFORMER.value:
+            # Transformer parameter estimation
+            hidden_size = params.get("hidden_size", 768)
+            layers = params.get("layers", 12)
+            heads = params.get("attention_heads", 12)
+            intermediate_size = params.get("intermediate_size", 3072)
+            vocab_size = 30000  # Assumed
+            
+            # Embedding parameters
+            embedding_params = vocab_size * hidden_size
+            
+            # Attention parameters (per layer)
+            attention_params = 4 * hidden_size * hidden_size  # Q, K, V, O
+            
+            # FF parameters (per layer)
+            ff_params = 2 * hidden_size * intermediate_size
+            
+            # Layer norm parameters
+            ln_params = 4 * hidden_size  # 2 layer norms per layer
+            
+            # Total parameters
+            total_params = embedding_params + layers * (attention_params + ff_params + ln_params)
+            
+            return total_params
+        
+        elif architecture == ModelArchitecture.NEURO_SYMBOLIC.value:
+            # Neuro-symbolic parameter estimation
+            hidden_size = params.get("hidden_size", 512)
+            neural_layers = params.get("neural_layers", 6)
+            reasoning_modules = params.get("reasoning_modules", 4)
+            symbol_vocab = params.get("symbol_vocabulary", 10000)
+            
+            # Base parameters
+            total_params = symbol_vocab * hidden_size  # Embeddings
+            
+            # Encoder parameters
+            encoder_params = neural_layers * (
+                2 * hidden_size +  # Layer norms
+                3 * hidden_size * hidden_size  # Self-attention + FF
+            )
+            
+            # Reasoner parameters
+            reasoner_params = reasoning_modules * (
+                2 * hidden_size * hidden_size  # Rule network + gate
+            )
+            
+            # Decoder parameters
+            decoder_params = neural_layers * (
+                2 * hidden_size +  # Layer norms
+                3 * hidden_size * hidden_size  # Self-attention + FF
+            )
+            
+            # Output parameters
+            output_params = hidden_size * symbol_vocab
+            
+            total_params += encoder_params + reasoner_params + decoder_params + output_params
+            
+            return total_params
+        
+        else:
+            # Generic estimation
+            return 10000000  # 10M parameters as default
+    
+    def _estimate_memory_usage(self, model: Dict[str, Any]) -> float:
+        """Estimate memory usage in MB"""
+        # Rough estimation: 4 bytes per parameter for FP32
+        parameters = self._calculate_parameters(model)
+        memory_mb = parameters * 4 / (1024 * 1024)
+        
+        # Add overhead
+        memory_mb *= 1.5
+        
+        return round(memory_mb, 2)
+    
+    def _estimate_inference_time(self, model: Dict[str, Any]) -> float:
+        """Estimate inference time in ms"""
+        architecture = model["architecture"]
+        params = model["parameters"]
+        
+        # Base time dependent on parameters
+        parameters = self._calculate_parameters(model)
+        base_time = parameters / 10000000  # 1ms per 10M parameters as base
+        
+        # Architecture-specific multipliers
+        if architecture == ModelArchitecture.TRANSFORMER.value:
+            # Sequence length effect
+            seq_length = params.get("max_position_embeddings", 512)
+            base_time *= (seq_length / 512) ** 1.5
+        
+        elif architecture == ModelArchitecture.NEURO_SYMBOLIC.value:
+            # Reasoning steps effect
+            reasoning_steps = params.get("reasoning_steps", 5)
+            base_time *= reasoning_steps / 3
+        
+        # Convert to ms
+        inference_time = base_time * 1000
+        
+        return round(inference_time, 2)
+    
+    def get_model(self, model_id: str) -> Optional[Dict[str, Any]]:
+        """Get a model by ID"""
+        return self.models.get(model_id)
+    
+    def get_models(self, architecture: str = None, status: str = None) -> List[Dict[str, Any]]:
+        """
+        Get list of models
+        
+        Args:
             architecture: Filter by architecture
-            scale: Filter by scale
-            limit: Maximum number of models to return
+            status: Filter by status
             
         Returns:
             List of models
         """
-        models = []
+        # Collect matching models
+        matching = []
         
-        # Get all models, sorted by creation time (newest first)
-        sorted_models = sorted(
-            self.registry["models"].values(),
-            key=lambda m: m["created_at"],
-            reverse=True
-        )
-        
-        # Apply filters
-        for model in sorted_models:
-            if specialization and model["specialization"] != specialization:
-                continue
-            
+        for model_id, model in self.models.items():
+            # Apply filters
             if architecture and model["architecture"] != architecture:
                 continue
             
-            if scale and model["scale"] != scale:
+            if status and model["status"] != status:
                 continue
             
-            # Add basic info
-            models.append({
-                "id": model["id"],
-                "name": model["name"],
-                "specialization": model["specialization"],
-                "architecture": model["architecture"],
-                "scale": model["scale"],
-                "parameters": model["parameters"],
-                "created_at": model["created_at"],
-                "status": model["status"],
-                "capabilities_count": len(model["capabilities"])
-            })
-            
-            # Apply limit
-            if len(models) >= limit:
-                break
+            # Include model
+            matching.append(model)
         
-        return models
+        # Sort by creation time (newest first)
+        matching.sort(key=lambda x: x["created_at"], reverse=True)
+        
+        return matching
     
-    def get_specialization_blueprint(self, specialization: str) -> Dict[str, Any]:
-        """
-        Get blueprint for a specialization
+    def get_available_architectures(self) -> List[Dict[str, Any]]:
+        """Get list of available architectures"""
+        architectures = []
         
-        Args:
-            specialization: The specialization type
-            
-        Returns:
-            Blueprint details
-        """
-        if specialization not in self.blueprints:
-            valid_specializations = list(self.blueprints.keys())
-            logger.warning(f"Specialization {specialization} not found. Valid options: {valid_specializations}")
-            return {
-                "success": False,
-                "error": f"Specialization not found: {specialization}",
-                "valid_specializations": valid_specializations
-            }
-        
-        return {
-            "success": True,
-            "specialization": specialization,
-            "blueprint": self.blueprints[specialization]
-        }
-    
-    def list_specializations(self) -> List[Dict[str, Any]]:
-        """
-        List available specializations
-        
-        Returns:
-            List of specializations with details
-        """
-        specializations = []
-        
-        for spec_type, blueprint in self.blueprints.items():
-            specializations.append({
-                "type": spec_type,
-                "name": blueprint["name"],
-                "description": blueprint["description"],
-                "architecture": blueprint["architecture"],
-                "key_capabilities": blueprint["key_capabilities"][:3]  # Just first 3 for brevity
+        for arch_value, template in self.architecture_templates.items():
+            architectures.append({
+                "id": arch_value,
+                "name": template.get("name", arch_value),
+                "description": template.get("description", ""),
+                "components": template.get("components", [])
             })
         
-        return specializations
+        return architectures
+    
+    def get_available_optimizations(self) -> List[Dict[str, Any]]:
+        """Get list of available optimizations"""
+        optimizations = []
+        
+        for opt_value, template in self.optimization_templates.items():
+            optimizations.append({
+                "id": opt_value,
+                "name": template.get("name", opt_value),
+                "description": template.get("description", "")
+            })
+        
+        return optimizations
     
     def get_status(self) -> Dict[str, Any]:
-        """Get model creator status"""
+        """Get the status of the model creator"""
         return {
-            "active_tasks": len(self.active_tasks),
-            "total_tasks": len(self.registry["creation_tasks"]),
-            "total_models": len(self.registry["models"]),
-            "available_specializations": len(self.blueprints),
-            "pending_tasks": self.task_queue.qsize(),
-            "config": {
-                "max_parallel_creations": self.config["max_parallel_creations"],
-                "default_model_scale": self.config["default_model_scale"],
-                "specialization_intensity": self.config["specialization_intensity"]
-            }
+            "operational": True,
+            "stats": {
+                "models_created": self.stats["models_created"],
+                "models_failed": self.stats["models_failed"],
+                "active_creations": len(self.active_sessions)
+            },
+            "available_architectures": len(self.architecture_templates),
+            "available_optimizations": len(self.optimization_templates)
         }
 
-# Initialize the model creator when module is imported
+# Initialize model creator
 model_creator = ModelCreator()

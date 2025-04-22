@@ -1,8 +1,8 @@
 """
-Model Communication System
+Model Communication System for Seren
 
-Enables seamless communication between AI models, allowing them to collaborate,
-ask questions of each other, and synthesize combined insights.
+Provides mechanisms for advanced inter-model communication, collaboration,
+and information exchange within the OpenManus architecture.
 """
 
 import os
@@ -11,16 +11,19 @@ import json
 import logging
 import time
 import uuid
+from enum import Enum
+from typing import Dict, List, Optional, Any, Union, Set, Tuple, Callable
+from datetime import datetime
 import threading
 import queue
-from typing import Dict, List, Optional, Any, Union, Set, Tuple, Callable
-from enum import Enum
-from datetime import datetime
 
 # Add parent directory to path for imports
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
+
+# Import security components
+from security.quantum_encryption import quantum_encryption, SecurityLevel
 
 # Configure logging
 logging.basicConfig(
@@ -29,61 +32,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Define model types
 class ModelType(Enum):
-    """Types of AI models in the system"""
-    QWEN = "qwen"              # Qwen2.5-omni-7b
-    OLYMPIC = "olympic"        # OlympicCoder-7B
-    HYBRID = "hybrid"          # Combined model
-    SPECIALIZED = "specialized"  # Task-specific model
-    SYSTEM = "system"          # System-generated messages
+    """Types of models in the system"""
+    QWEN = "qwen"           # Qwen model (previously Llama)
+    OLYMPIC = "olympic"     # Olympic Coder model (previously Gemma)
+    HYBRID = "hybrid"       # Hybrid model (combined capabilities)
+    SYSTEM = "system"       # System-generated messages
 
-# Define message types
 class MessageType(Enum):
-    """Types of messages exchanged between models"""
-    QUESTION = "question"      # Question to another model
+    """Types of inter-model messages"""
+    QUESTION = "question"      # Question from one model to another
     ANSWER = "answer"          # Answer to a question
     SUGGESTION = "suggestion"  # Suggestion for improvement
     CRITIQUE = "critique"      # Critique of a solution
-    CLARIFICATION = "clarification"  # Request for clarification
-    EXPLANATION = "explanation"  # Explanation of approach
-    CODE = "code"              # Code snippet
-    ERROR = "error"            # Error report
-    SOLUTION = "solution"      # Solution proposal
-    PLANNING = "planning"      # Planning discussion
+    REFINEMENT = "refinement"  # Refinement of a previous solution
+    STATUS = "status"          # Status update
+    ERROR = "error"            # Error message
     SYSTEM = "system"          # System message
 
-# Define message priority
-class MessagePriority(Enum):
-    """Priority levels for messages"""
-    LOW = "low"
-    NORMAL = "normal"
-    HIGH = "high"
-    CRITICAL = "critical"
-
-# Define message states
-class MessageState(Enum):
-    """States a message can be in"""
-    PENDING = "pending"        # Waiting to be processed
-    DELIVERED = "delivered"    # Delivered to recipient
-    READ = "read"              # Read by recipient
-    ANSWERED = "answered"      # Answered by recipient
-    EXPIRED = "expired"        # No longer relevant
-    FAILED = "failed"          # Failed to process
+class CollaborationMode(Enum):
+    """Modes of model collaboration"""
+    COLLABORATIVE = "collaborative"  # Models work together on the same task
+    SPECIALIZED = "specialized"      # Models work on different aspects of a task
+    COMPETITIVE = "competitive"      # Models compete to produce the best solution
 
 class CommunicationSystem:
     """
-    Model Communication System
+    Model Communication System for Seren
     
-    Enables seamless, structured communication between different AI models
-    in the system, allowing for collaborative problem-solving and knowledge sharing.
+    Provides mechanisms for advanced inter-model communication, collaboration,
+    and information exchange:
+    - Model-to-model messaging
+    - Multi-agent conversations
+    - Structured knowledge exchange
+    - Collaborative problem-solving
+    - Query and response patterns
     
     Bleeding-edge capabilities:
-    1. Multi-model dialogue with contextual awareness
-    2. Structured knowledge exchange with semantic routing
-    3. Interruption and priority handling for critical insights
-    4. Backpropagation of insights across conversation history
-    5. Parallel reasoning paths with synthesis
+    1. Context-aware communication
+    2. Cross-model knowledge synthesis
+    3. Parallel collaborative reasoning
+    4. Self-reflection and model criticism
+    5. Structured output negotiation
     """
     
     def __init__(self, base_dir: str = None):
@@ -91,77 +81,106 @@ class CommunicationSystem:
         # Set the base directory
         self.base_dir = base_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
-        # Conversations and messages storage
-        self.conversations: Dict[str, Dict[str, Any]] = {}
-        self.messages: Dict[str, Dict[str, Any]] = {}
+        # Conversations registry
+        self.conversations = {}
         
-        # Message queue and processing thread
-        self.message_queue = queue.PriorityQueue()
-        self.message_thread = threading.Thread(target=self._message_processor, daemon=True)
-        self.message_thread.start()
+        # Active participants
+        self.participants = {
+            ModelType.QWEN.value: True,
+            ModelType.OLYMPIC.value: True,
+            ModelType.HYBRID.value: False,
+            ModelType.SYSTEM.value: True
+        }
         
-        # Message handlers for different model types
-        self.message_handlers: Dict[ModelType, Callable] = {}
+        # Message queues (model-specific)
+        self.message_queues = {
+            ModelType.QWEN.value: queue.Queue(),
+            ModelType.OLYMPIC.value: queue.Queue(),
+            ModelType.HYBRID.value: queue.Queue(),
+            ModelType.SYSTEM.value: queue.Queue()
+        }
         
-        # Configure default timeouts
-        self.default_answer_timeout = 60  # seconds
+        # Message history
+        self.message_history = []
         
-        # Message templates for different message types
-        self.message_templates = self._load_message_templates()
-        
-        # Metrics tracking
-        self.metrics = {
+        # Communication stats
+        self.stats = {
             "messages_sent": 0,
-            "messages_received": 0,
-            "questions_asked": 0,
-            "questions_answered": 0,
-            "average_response_time": 0,
-            "total_response_time": 0,
-            "model_interactions": {
-                ModelType.QWEN.value: 0,
-                ModelType.OLYMPIC.value: 0,
-                ModelType.HYBRID.value: 0,
-                ModelType.SPECIALIZED.value: 0,
-                ModelType.SYSTEM.value: 0
-            }
+            "messages_by_type": {message_type.value: 0 for message_type in MessageType},
+            "messages_by_model": {model_type.value: 0 for model_type in ModelType},
+            "conversations_created": 0,
+            "average_response_time": 0
         }
         
-        logger.info("Model Communication System initialized")
+        # Start message processors
+        self._start_message_processors()
+        
+        # Current collaboration mode
+        self.collaboration_mode = CollaborationMode.COLLABORATIVE
+        
+        logger.info("Communication System initialized")
     
-    def _load_message_templates(self) -> Dict[MessageType, str]:
-        """Load message templates for different message types"""
-        return {
-            MessageType.QUESTION: "Question from {from_model}: {content}",
-            MessageType.ANSWER: "Answer from {from_model}: {content}",
-            MessageType.SUGGESTION: "Suggestion from {from_model}: {content}",
-            MessageType.CRITIQUE: "Critique from {from_model}: {content}",
-            MessageType.CLARIFICATION: "Clarification request from {from_model}: {content}",
-            MessageType.EXPLANATION: "Explanation from {from_model}: {content}",
-            MessageType.CODE: "Code from {from_model}: {content}",
-            MessageType.ERROR: "Error report from {from_model}: {content}",
-            MessageType.SOLUTION: "Solution from {from_model}: {content}",
-            MessageType.PLANNING: "Planning from {from_model}: {content}",
-            MessageType.SYSTEM: "System message: {content}"
-        }
+    def _start_message_processors(self) -> None:
+        """Start the message processing threads"""
+        # In a real implementation, this would start actual threads
+        # For simulation, we'll just set up placeholders
+        self.message_processors = {}
+        
+        # This would be threaded in a real implementation
+        # for model_type in ModelType:
+        #     processor = threading.Thread(
+        #         target=self._process_messages,
+        #         args=(model_type.value,),
+        #         daemon=True
+        #     )
+        #     processor.start()
+        #     self.message_processors[model_type.value] = processor
     
-    def register_message_handler(self, model_type: ModelType, handler: Callable) -> None:
-        """Register a message handler for a specific model type"""
-        self.message_handlers[model_type] = handler
-        logger.info(f"Registered message handler for {model_type.value}")
+    def _process_messages(self, model_type: str) -> None:
+        """
+        Process messages for a specific model
+        
+        Args:
+            model_type: Type of model to process messages for
+        """
+        # In a real implementation, this would be a thread function
+        message_queue = self.message_queues.get(model_type)
+        
+        if not message_queue:
+            logger.error(f"No message queue for model type: {model_type}")
+            return
+        
+        while True:
+            try:
+                # Get next message from queue
+                message = message_queue.get(timeout=1)
+                
+                # Process message (in a real implementation, this would route to the model)
+                logger.info(f"Processing message for {model_type}: {message['id']}")
+                
+                # Mark as done
+                message_queue.task_done()
+            
+            except queue.Empty:
+                # No messages, continue
+                continue
+            
+            except Exception as e:
+                logger.error(f"Error processing message for {model_type}: {str(e)}")
     
     def create_conversation(
         self,
         topic: str,
-        context: Dict[str, Any] = None,
-        metadata: Dict[str, Any] = None
+        participants: List[Union[ModelType, str]],
+        context: Dict[str, Any] = None
     ) -> str:
         """
         Create a new conversation
         
         Args:
-            topic: The conversation topic
-            context: Contextual information for the conversation
-            metadata: Additional metadata
+            topic: Conversation topic
+            participants: List of participants
+            context: Additional context
             
         Returns:
             Conversation ID
@@ -169,61 +188,189 @@ class CommunicationSystem:
         # Generate conversation ID
         conversation_id = str(uuid.uuid4())
         
-        # Create conversation object
+        # Convert participants to string if needed
+        participant_values = []
+        for participant in participants:
+            if isinstance(participant, ModelType):
+                participant_values.append(participant.value)
+            else:
+                # Validate participant
+                try:
+                    ModelType(participant)
+                    participant_values.append(participant)
+                except ValueError:
+                    logger.warning(f"Invalid participant type: {participant}")
+        
+        # Create conversation
         conversation = {
             "id": conversation_id,
             "topic": topic,
-            "context": context or {},
-            "metadata": metadata or {},
+            "participants": participant_values,
+            "messages": [],
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
-            "message_ids": [],
-            "participants": set(),
+            "context": context or {},
             "status": "active"
         }
         
         # Store conversation
         self.conversations[conversation_id] = conversation
         
-        logger.info(f"Created conversation {conversation_id}: {topic}")
+        # Update stats
+        self.stats["conversations_created"] += 1
+        
+        # Add system message
+        self.add_message(
+            conversation_id=conversation_id,
+            from_model=ModelType.SYSTEM.value,
+            message_type=MessageType.SYSTEM.value,
+            content=f"Conversation started: {topic}",
+            metadata={
+                "participants": participant_values
+            }
+        )
+        
+        logger.info(f"Conversation created: {conversation_id} - {topic}")
         
         return conversation_id
     
-    def get_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
-        """Get conversation details"""
-        if conversation_id not in self.conversations:
-            logger.warning(f"Conversation {conversation_id} not found")
-            return None
-        
-        conversation = self.conversations[conversation_id].copy()
-        
-        # Convert participant set to list for serialization
-        conversation["participants"] = list(conversation["participants"])
-        
-        return conversation
-    
-    def get_conversation_messages(
+    def add_message(
         self,
         conversation_id: str,
-        limit: int = 100,
-        offset: int = 0
-    ) -> List[Dict[str, Any]]:
-        """Get messages in a conversation"""
+        from_model: Union[ModelType, str],
+        message_type: Union[MessageType, str],
+        content: str,
+        to_model: Union[ModelType, str, None] = None,
+        metadata: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """
+        Add a message to a conversation
+        
+        Args:
+            conversation_id: Conversation ID
+            from_model: Source model
+            message_type: Type of message
+            content: Message content
+            to_model: Target model (if applicable)
+            metadata: Additional metadata
+            
+        Returns:
+            Added message
+        """
+        # Check if conversation exists
         if conversation_id not in self.conversations:
-            logger.warning(f"Conversation {conversation_id} not found")
+            logger.error(f"Conversation not found: {conversation_id}")
+            return {"error": f"Conversation not found: {conversation_id}"}
+        
+        # Convert model types to string if needed
+        from_model_value = from_model.value if isinstance(from_model, ModelType) else from_model
+        to_model_value = to_model.value if isinstance(to_model, ModelType) else to_model
+        
+        # Convert message type to string if needed
+        message_type_value = message_type.value if isinstance(message_type, MessageType) else message_type
+        
+        # Generate message ID
+        message_id = str(uuid.uuid4())
+        
+        # Create message
+        message = {
+            "id": message_id,
+            "conversation_id": conversation_id,
+            "from": from_model_value,
+            "to": to_model_value,
+            "type": message_type_value,
+            "content": content,
+            "timestamp": datetime.now().isoformat(),
+            "metadata": metadata or {}
+        }
+        
+        # Add to conversation
+        conversation = self.conversations[conversation_id]
+        conversation["messages"].append(message)
+        conversation["updated_at"] = datetime.now().isoformat()
+        
+        # Add to message history
+        self.message_history.append(message)
+        
+        # Update stats
+        self.stats["messages_sent"] += 1
+        self.stats["messages_by_type"][message_type_value] = self.stats["messages_by_type"].get(message_type_value, 0) + 1
+        self.stats["messages_by_model"][from_model_value] = self.stats["messages_by_model"].get(from_model_value, 0) + 1
+        
+        # If directed message, add to recipient's queue
+        if to_model_value and to_model_value in self.message_queues:
+            self.message_queues[to_model_value].put(message)
+        
+        logger.info(f"Message added to conversation {conversation_id}: {message_id}")
+        
+        return message
+    
+    def get_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
+        """Get a conversation by ID"""
+        conversation = self.conversations.get(conversation_id)
+        
+        if conversation:
+            # Make a copy with messages sorted by timestamp
+            result = conversation.copy()
+            result["messages"] = sorted(result["messages"], key=lambda m: m["timestamp"])
+            return result
+        
+        return None
+    
+    def get_messages(
+        self,
+        conversation_id: str,
+        from_model: Union[ModelType, str, None] = None,
+        to_model: Union[ModelType, str, None] = None,
+        message_type: Union[MessageType, str, None] = None,
+        limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get messages from a conversation
+        
+        Args:
+            conversation_id: Conversation ID
+            from_model: Filter by source model
+            to_model: Filter by target model
+            message_type: Filter by message type
+            limit: Maximum number of messages to return
+            
+        Returns:
+            Filtered messages
+        """
+        # Check if conversation exists
+        if conversation_id not in self.conversations:
+            logger.error(f"Conversation not found: {conversation_id}")
             return []
         
+        # Get conversation
         conversation = self.conversations[conversation_id]
-        message_ids = conversation["message_ids"]
         
-        # Apply pagination
-        paginated_ids = message_ids[offset:offset + limit]
+        # Convert model types to string if needed
+        from_model_value = from_model.value if isinstance(from_model, ModelType) else from_model
+        to_model_value = to_model.value if isinstance(to_model, ModelType) else to_model
         
-        # Get messages
-        messages = []
-        for message_id in paginated_ids:
-            if message_id in self.messages:
-                messages.append(self.messages[message_id])
+        # Convert message type to string if needed
+        message_type_value = message_type.value if isinstance(message_type, MessageType) else message_type
+        
+        # Filter messages
+        messages = conversation["messages"]
+        
+        if from_model_value:
+            messages = [m for m in messages if m["from"] == from_model_value]
+        
+        if to_model_value:
+            messages = [m for m in messages if m["to"] == to_model_value]
+        
+        if message_type_value:
+            messages = [m for m in messages if m["type"] == message_type_value]
+        
+        # Sort by timestamp
+        messages = sorted(messages, key=lambda m: m["timestamp"])
+        
+        # Apply limit
+        if limit and limit > 0:
+            messages = messages[-limit:]
         
         return messages
     
@@ -232,710 +379,347 @@ class CommunicationSystem:
         from_model: Union[ModelType, str],
         to_model: Union[ModelType, str],
         content: str,
-        message_type: Union[MessageType, str] = MessageType.QUESTION,
-        priority: Union[MessagePriority, str] = MessagePriority.NORMAL,
-        conversation_id: Optional[str] = None,
         context: Dict[str, Any] = None,
-        metadata: Dict[str, Any] = None,
-        answer_timeout: Optional[int] = None
+        conversation_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Ask a question to another model
+        Ask a question from one model to another
         
         Args:
-            from_model: The asking model
-            to_model: The model being asked
+            from_model: Source model
+            to_model: Target model
             content: Question content
-            message_type: Type of message
-            priority: Message priority
-            conversation_id: Optional conversation ID
-            context: Contextual information
-            metadata: Additional metadata
-            answer_timeout: Timeout for answer in seconds
+            context: Additional context
+            conversation_id: Existing conversation ID
             
         Returns:
-            Message object
+            Question message
         """
-        # Convert string types to enum values if needed
-        if isinstance(from_model, str):
-            from_model = ModelType(from_model)
+        # Convert model types to string if needed
+        from_model_value = from_model.value if isinstance(from_model, ModelType) else from_model
+        to_model_value = to_model.value if isinstance(to_model, ModelType) else to_model
         
-        if isinstance(to_model, str):
-            to_model = ModelType(to_model)
+        # Validate models
+        if from_model_value not in self.participants or not self.participants[from_model_value]:
+            logger.error(f"Source model not available: {from_model_value}")
+            return {"error": f"Source model not available: {from_model_value}"}
         
-        if isinstance(message_type, str):
-            message_type = MessageType(message_type)
+        if to_model_value not in self.participants or not self.participants[to_model_value]:
+            logger.error(f"Target model not available: {to_model_value}")
+            return {"error": f"Target model not available: {to_model_value}"}
         
-        if isinstance(priority, str):
-            priority = MessagePriority(priority)
-        
-        # Create new conversation if needed
-        topic = f"Question from {from_model.value} to {to_model.value}"
-        if not conversation_id:
+        # Create or get conversation
+        if conversation_id and conversation_id in self.conversations:
+            # Check if models are participants
+            conversation = self.conversations[conversation_id]
+            if from_model_value not in conversation["participants"]:
+                conversation["participants"].append(from_model_value)
+            if to_model_value not in conversation["participants"]:
+                conversation["participants"].append(to_model_value)
+        else:
+            # Create new conversation
             conversation_id = self.create_conversation(
-                topic=topic,
-                context=context,
-                metadata=metadata
-            )
-        elif conversation_id not in self.conversations:
-            logger.warning(f"Conversation {conversation_id} not found, creating new one")
-            conversation_id = self.create_conversation(
-                topic=topic,
-                context=context,
-                metadata=metadata
+                topic=f"Question from {from_model_value} to {to_model_value}",
+                participants=[from_model_value, to_model_value],
+                context=context
             )
         
-        # Update conversation participants
-        conversation = self.conversations[conversation_id]
-        conversation["participants"].add(from_model.value)
-        conversation["participants"].add(to_model.value)
-        conversation["updated_at"] = datetime.now().isoformat()
+        # Add question message
+        message = self.add_message(
+            conversation_id=conversation_id,
+            from_model=from_model_value,
+            to_model=to_model_value,
+            message_type=MessageType.QUESTION.value,
+            content=content,
+            metadata={
+                "context": context or {}
+            }
+        )
         
-        # Generate message ID
-        message_id = str(uuid.uuid4())
-        
-        # Create message object
-        message = {
-            "id": message_id,
-            "conversation_id": conversation_id,
-            "from_model": from_model.value,
-            "to_model": to_model.value,
-            "content": content,
-            "message_type": message_type.value,
-            "priority": priority.value,
-            "sent_at": datetime.now().isoformat(),
-            "delivered_at": None,
-            "read_at": None,
-            "answered_at": None,
-            "state": MessageState.PENDING.value,
-            "answer_id": None,
-            "context": context or {},
-            "metadata": metadata or {}
-        }
-        
-        # Store message
-        self.messages[message_id] = message
-        
-        # Add to conversation
-        conversation["message_ids"].append(message_id)
-        
-        # Add to message queue for processing
-        # Priority queue items are tuples of (priority_value, timestamp, message_id)
-        priority_value = {
-            MessagePriority.LOW.value: 3,
-            MessagePriority.NORMAL.value: 2,
-            MessagePriority.HIGH.value: 1,
-            MessagePriority.CRITICAL.value: 0
-        }.get(priority.value, 2)
-        
-        self.message_queue.put((
-            priority_value,
-            time.time(),
-            message_id
-        ))
-        
-        # Update metrics
-        self.metrics["messages_sent"] += 1
-        self.metrics["questions_asked"] += 1
-        self.metrics["model_interactions"][from_model.value] += 1
-        
-        logger.info(f"Question asked: {message_id} from {from_model.value} to {to_model.value}")
+        # In a real implementation, this would trigger the model to generate a response
+        # For simulation, we'll add a system placeholder message
+        answer = self.add_message(
+            conversation_id=conversation_id,
+            from_model=to_model_value,
+            to_model=from_model_value,
+            message_type=MessageType.ANSWER.value,
+            content=f"This is a simulated response from {to_model_value} to the question: {content[:50]}...",
+            metadata={
+                "simulated": True
+            }
+        )
         
         return message
     
-    def answer_question(
-        self,
-        question_id: str,
-        content: str,
-        metadata: Dict[str, Any] = None
-    ) -> Dict[str, Any]:
-        """
-        Answer a question
-        
-        Args:
-            question_id: ID of the question to answer
-            content: Answer content
-            metadata: Additional metadata
-            
-        Returns:
-            Answer message object
-        """
-        # Check if question exists
-        if question_id not in self.messages:
-            logger.warning(f"Question {question_id} not found")
-            return {
-                "error": "Question not found",
-                "question_id": question_id
-            }
-        
-        # Get question
-        question = self.messages[question_id]
-        
-        # Check if already answered
-        if question["state"] == MessageState.ANSWERED.value:
-            logger.warning(f"Question {question_id} already answered")
-            return {
-                "error": "Question already answered",
-                "question_id": question_id,
-                "answer_id": question["answer_id"]
-            }
-        
-        # Get conversation
-        conversation_id = question["conversation_id"]
-        if conversation_id not in self.conversations:
-            logger.warning(f"Conversation {conversation_id} not found")
-            return {
-                "error": "Conversation not found",
-                "conversation_id": conversation_id
-            }
-        
-        conversation = self.conversations[conversation_id]
-        
-        # Generate answer ID
-        answer_id = str(uuid.uuid4())
-        
-        # Create answer message
-        answer = {
-            "id": answer_id,
-            "conversation_id": conversation_id,
-            "from_model": question["to_model"],
-            "to_model": question["from_model"],
-            "content": content,
-            "message_type": MessageType.ANSWER.value,
-            "priority": question["priority"],
-            "sent_at": datetime.now().isoformat(),
-            "delivered_at": datetime.now().isoformat(),
-            "read_at": None,
-            "state": MessageState.DELIVERED.value,
-            "question_id": question_id,
-            "context": question["context"],
-            "metadata": metadata or {}
-        }
-        
-        # Store answer
-        self.messages[answer_id] = answer
-        
-        # Update question
-        question["state"] = MessageState.ANSWERED.value
-        question["answer_id"] = answer_id
-        question["answered_at"] = datetime.now().isoformat()
-        
-        # Add to conversation
-        conversation["message_ids"].append(answer_id)
-        conversation["updated_at"] = datetime.now().isoformat()
-        
-        # Calculate response time
-        sent_time = datetime.fromisoformat(question["sent_at"])
-        answered_time = datetime.fromisoformat(question["answered_at"])
-        response_time = (answered_time - sent_time).total_seconds()
-        
-        # Update metrics
-        self.metrics["messages_sent"] += 1
-        self.metrics["questions_answered"] += 1
-        self.metrics["model_interactions"][question["to_model"]] += 1
-        self.metrics["total_response_time"] += response_time
-        if self.metrics["questions_answered"] > 0:
-            self.metrics["average_response_time"] = (
-                self.metrics["total_response_time"] / self.metrics["questions_answered"]
-            )
-        
-        logger.info(f"Question {question_id} answered with {answer_id}")
-        
-        return answer
-    
-    def send_message(
+    def send_suggestion(
         self,
         from_model: Union[ModelType, str],
         to_model: Union[ModelType, str],
         content: str,
-        message_type: Union[MessageType, str],
-        priority: Union[MessagePriority, str] = MessagePriority.NORMAL,
-        conversation_id: Optional[str] = None,
         context: Dict[str, Any] = None,
-        metadata: Dict[str, Any] = None
+        conversation_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Send a general message to another model
+        Send a suggestion from one model to another
         
         Args:
-            from_model: The sending model
-            to_model: The receiving model
-            content: Message content
-            message_type: Type of message
-            priority: Message priority
-            conversation_id: Optional conversation ID
-            context: Contextual information
-            metadata: Additional metadata
+            from_model: Source model
+            to_model: Target model
+            content: Suggestion content
+            context: Additional context
+            conversation_id: Existing conversation ID
             
         Returns:
-            Message object
+            Suggestion message
         """
-        # Convert string types to enum values if needed
-        if isinstance(from_model, str):
-            from_model = ModelType(from_model)
+        # Convert model types to string if needed
+        from_model_value = from_model.value if isinstance(from_model, ModelType) else from_model
+        to_model_value = to_model.value if isinstance(to_model, ModelType) else to_model
         
-        if isinstance(to_model, str):
-            to_model = ModelType(to_model)
+        # Validate models
+        if from_model_value not in self.participants or not self.participants[from_model_value]:
+            logger.error(f"Source model not available: {from_model_value}")
+            return {"error": f"Source model not available: {from_model_value}"}
         
-        if isinstance(message_type, str):
-            message_type = MessageType(message_type)
+        if to_model_value not in self.participants or not self.participants[to_model_value]:
+            logger.error(f"Target model not available: {to_model_value}")
+            return {"error": f"Target model not available: {to_model_value}"}
         
-        if isinstance(priority, str):
-            priority = MessagePriority(priority)
-        
-        # Create new conversation if needed
-        topic = f"Communication from {from_model.value} to {to_model.value}"
-        if not conversation_id:
+        # Create or get conversation
+        if conversation_id and conversation_id in self.conversations:
+            # Check if models are participants
+            conversation = self.conversations[conversation_id]
+            if from_model_value not in conversation["participants"]:
+                conversation["participants"].append(from_model_value)
+            if to_model_value not in conversation["participants"]:
+                conversation["participants"].append(to_model_value)
+        else:
+            # Create new conversation
             conversation_id = self.create_conversation(
-                topic=topic,
-                context=context,
-                metadata=metadata
-            )
-        elif conversation_id not in self.conversations:
-            logger.warning(f"Conversation {conversation_id} not found, creating new one")
-            conversation_id = self.create_conversation(
-                topic=topic,
-                context=context,
-                metadata=metadata
+                topic=f"Suggestion from {from_model_value} to {to_model_value}",
+                participants=[from_model_value, to_model_value],
+                context=context
             )
         
-        # Update conversation participants
-        conversation = self.conversations[conversation_id]
-        conversation["participants"].add(from_model.value)
-        conversation["participants"].add(to_model.value)
-        conversation["updated_at"] = datetime.now().isoformat()
-        
-        # Generate message ID
-        message_id = str(uuid.uuid4())
-        
-        # Create message object
-        message = {
-            "id": message_id,
-            "conversation_id": conversation_id,
-            "from_model": from_model.value,
-            "to_model": to_model.value,
-            "content": content,
-            "message_type": message_type.value,
-            "priority": priority.value,
-            "sent_at": datetime.now().isoformat(),
-            "delivered_at": None,
-            "read_at": None,
-            "state": MessageState.PENDING.value,
-            "context": context or {},
-            "metadata": metadata or {}
-        }
-        
-        # Store message
-        self.messages[message_id] = message
-        
-        # Add to conversation
-        conversation["message_ids"].append(message_id)
-        
-        # Add to message queue for processing
-        # Priority queue items are tuples of (priority_value, timestamp, message_id)
-        priority_value = {
-            MessagePriority.LOW.value: 3,
-            MessagePriority.NORMAL.value: 2,
-            MessagePriority.HIGH.value: 1,
-            MessagePriority.CRITICAL.value: 0
-        }.get(priority.value, 2)
-        
-        self.message_queue.put((
-            priority_value,
-            time.time(),
-            message_id
-        ))
-        
-        # Update metrics
-        self.metrics["messages_sent"] += 1
-        self.metrics["model_interactions"][from_model.value] += 1
-        
-        logger.info(f"Message sent: {message_id} from {from_model.value} to {to_model.value}")
+        # Add suggestion message
+        message = self.add_message(
+            conversation_id=conversation_id,
+            from_model=from_model_value,
+            to_model=to_model_value,
+            message_type=MessageType.SUGGESTION.value,
+            content=content,
+            metadata={
+                "context": context or {}
+            }
+        )
         
         return message
     
-    def _message_processor(self) -> None:
-        """Worker thread to process messages in the queue"""
-        while True:
-            try:
-                # Get next message from the queue
-                _, _, message_id = self.message_queue.get()
-                
-                # Check if message exists
-                if message_id not in self.messages:
-                    logger.warning(f"Message {message_id} not found in queue")
-                    self.message_queue.task_done()
-                    continue
-                
-                # Get message
-                message = self.messages[message_id]
-                
-                # Check message state
-                if message["state"] != MessageState.PENDING.value:
-                    logger.warning(f"Message {message_id} not in PENDING state")
-                    self.message_queue.task_done()
-                    continue
-                
-                # Get target model
-                to_model = message["to_model"]
-                
-                # Deliver message
-                self._deliver_message(message)
-                
-                # Mark as delivered
-                message["delivered_at"] = datetime.now().isoformat()
-                message["state"] = MessageState.DELIVERED.value
-                
-                # Update metrics
-                self.metrics["messages_received"] += 1
-                
-                # Mark task as done
-                self.message_queue.task_done()
-                
-            except Exception as e:
-                logger.error(f"Error processing message: {str(e)}")
-                time.sleep(1)  # Avoid busy loop in case of repeated errors
-    
-    def _deliver_message(self, message: Dict[str, Any]) -> None:
-        """Deliver a message to its target model"""
-        to_model_str = message["to_model"]
-        
-        try:
-            # Convert to ModelType enum if possible
-            to_model = ModelType(to_model_str)
-            
-            # Check if we have a registered handler for this model
-            if to_model in self.message_handlers:
-                # Call the handler
-                self.message_handlers[to_model](message)
-                logger.info(f"Message {message['id']} delivered to handler for {to_model_str}")
-            else:
-                # No handler, just log the message
-                logger.info(f"Message {message['id']} delivered to {to_model_str} (no handler)")
-                
-                # Format using template if available
-                message_type = message["message_type"]
-                if message_type in self.message_templates:
-                    template = self.message_templates[message_type]
-                    formatted = template.format(
-                        from_model=message["from_model"],
-                        to_model=message["to_model"],
-                        content=message["content"]
-                    )
-                    logger.info(f"Message content: {formatted}")
-                else:
-                    logger.info(f"Message content: {message['content']}")
-        
-        except ValueError:
-            # Not a valid ModelType
-            logger.warning(f"Unknown model type: {to_model_str}")
-            logger.info(f"Message {message['id']} content: {message['content']}")
-    
-    def mark_message_read(self, message_id: str) -> bool:
-        """Mark a message as read"""
-        if message_id not in self.messages:
-            logger.warning(f"Message {message_id} not found")
-            return False
-        
-        message = self.messages[message_id]
-        
-        if message["state"] not in [MessageState.DELIVERED.value, MessageState.READ.value]:
-            logger.warning(f"Message {message_id} not in DELIVERED or READ state")
-            return False
-        
-        message["read_at"] = datetime.now().isoformat()
-        message["state"] = MessageState.READ.value
-        
-        logger.info(f"Message {message_id} marked as read")
-        
-        return True
-    
-    def get_message(self, message_id: str) -> Optional[Dict[str, Any]]:
-        """Get a message by ID"""
-        if message_id not in self.messages:
-            logger.warning(f"Message {message_id} not found")
-            return None
-        
-        return self.messages[message_id]
-    
-    def get_unread_messages(
+    def send_critique(
         self,
-        model: Union[ModelType, str],
-        limit: int = 10
-    ) -> List[Dict[str, Any]]:
+        from_model: Union[ModelType, str],
+        to_model: Union[ModelType, str],
+        content: str,
+        target_message_id: Optional[str] = None,
+        context: Dict[str, Any] = None,
+        conversation_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
-        Get unread messages for a model
+        Send a critique from one model to another
         
         Args:
-            model: The model to get messages for
-            limit: Maximum number of messages to return
+            from_model: Source model
+            to_model: Target model
+            content: Critique content
+            target_message_id: ID of the message being critiqued
+            context: Additional context
+            conversation_id: Existing conversation ID
             
         Returns:
-            List of unread messages
+            Critique message
         """
-        # Convert string to enum if needed
-        if isinstance(model, str):
-            model = ModelType(model)
+        # Convert model types to string if needed
+        from_model_value = from_model.value if isinstance(from_model, ModelType) else from_model
+        to_model_value = to_model.value if isinstance(to_model, ModelType) else to_model
         
-        model_value = model.value
+        # Validate models
+        if from_model_value not in self.participants or not self.participants[from_model_value]:
+            logger.error(f"Source model not available: {from_model_value}")
+            return {"error": f"Source model not available: {from_model_value}"}
         
-        # Find unread messages
-        unread = []
-        for message_id, message in self.messages.items():
-            if (
-                message["to_model"] == model_value and
-                message["state"] == MessageState.DELIVERED.value and
-                not message["read_at"]
-            ):
-                unread.append(message)
+        if to_model_value not in self.participants or not self.participants[to_model_value]:
+            logger.error(f"Target model not available: {to_model_value}")
+            return {"error": f"Target model not available: {to_model_value}"}
         
-        # Sort by priority and time
-        unread.sort(
-            key=lambda m: (
-                {
-                    MessagePriority.LOW.value: 3,
-                    MessagePriority.NORMAL.value: 2,
-                    MessagePriority.HIGH.value: 1,
-                    MessagePriority.CRITICAL.value: 0
-                }.get(m["priority"], 2),
-                m["sent_at"]
+        # Create or get conversation
+        if conversation_id and conversation_id in self.conversations:
+            # Check if models are participants
+            conversation = self.conversations[conversation_id]
+            if from_model_value not in conversation["participants"]:
+                conversation["participants"].append(from_model_value)
+            if to_model_value not in conversation["participants"]:
+                conversation["participants"].append(to_model_value)
+        else:
+            # Create new conversation
+            conversation_id = self.create_conversation(
+                topic=f"Critique from {from_model_value} to {to_model_value}",
+                participants=[from_model_value, to_model_value],
+                context=context
             )
-        )
         
-        # Apply limit
-        return unread[:limit]
-    
-    def get_unanswered_questions(
-        self,
-        model: Union[ModelType, str],
-        limit: int = 10
-    ) -> List[Dict[str, Any]]:
-        """
-        Get unanswered questions for a model
-        
-        Args:
-            model: The model to get questions for
-            limit: Maximum number of questions to return
-            
-        Returns:
-            List of unanswered questions
-        """
-        # Convert string to enum if needed
-        if isinstance(model, str):
-            model = ModelType(model)
-        
-        model_value = model.value
-        
-        # Find unanswered questions
-        unanswered = []
-        for message_id, message in self.messages.items():
-            if (
-                message["to_model"] == model_value and
-                message["message_type"] == MessageType.QUESTION.value and
-                message["state"] not in [MessageState.ANSWERED.value, MessageState.EXPIRED.value, MessageState.FAILED.value]
-            ):
-                unanswered.append(message)
-        
-        # Sort by priority and time
-        unanswered.sort(
-            key=lambda m: (
-                {
-                    MessagePriority.LOW.value: 3,
-                    MessagePriority.NORMAL.value: 2,
-                    MessagePriority.HIGH.value: 1,
-                    MessagePriority.CRITICAL.value: 0
-                }.get(m["priority"], 2),
-                m["sent_at"]
-            )
-        )
-        
-        # Apply limit
-        return unanswered[:limit]
-    
-    def close_conversation(self, conversation_id: str) -> bool:
-        """Close a conversation"""
-        if conversation_id not in self.conversations:
-            logger.warning(f"Conversation {conversation_id} not found")
-            return False
-        
-        conversation = self.conversations[conversation_id]
-        conversation["status"] = "closed"
-        conversation["updated_at"] = datetime.now().isoformat()
-        
-        logger.info(f"Conversation {conversation_id} closed")
-        
-        return True
-    
-    def archive_conversation(self, conversation_id: str) -> bool:
-        """Archive a conversation"""
-        if conversation_id not in self.conversations:
-            logger.warning(f"Conversation {conversation_id} not found")
-            return False
-        
-        conversation = self.conversations[conversation_id]
-        conversation["status"] = "archived"
-        conversation["updated_at"] = datetime.now().isoformat()
-        
-        logger.info(f"Conversation {conversation_id} archived")
-        
-        return True
-    
-    def search_conversations(
-        self,
-        query: str,
-        models: List[Union[ModelType, str]] = None,
-        message_types: List[Union[MessageType, str]] = None,
-        status: str = "active",
-        limit: int = 10
-    ) -> List[Dict[str, Any]]:
-        """
-        Search conversations
-        
-        Args:
-            query: Search query
-            models: Filter by models involved
-            message_types: Filter by message types
-            status: Filter by conversation status
-            limit: Maximum number of conversations to return
-            
-        Returns:
-            List of matching conversations
-        """
-        # Convert models to string values if needed
-        model_values = None
-        if models:
-            model_values = []
-            for model in models:
-                if isinstance(model, ModelType):
-                    model_values.append(model.value)
-                else:
-                    model_values.append(model)
-        
-        # Convert message types to string values if needed
-        message_type_values = None
-        if message_types:
-            message_type_values = []
-            for message_type in message_types:
-                if isinstance(message_type, MessageType):
-                    message_type_values.append(message_type.value)
-                else:
-                    message_type_values.append(message_type)
-        
-        # Find matching conversations
-        results = []
-        
-        for conversation_id, conversation in self.conversations.items():
-            # Filter by status
-            if status and conversation["status"] != status:
-                continue
-            
-            # Filter by models
-            if model_values:
-                participants = conversation["participants"]
-                if not any(model in participants for model in model_values):
-                    continue
-            
-            # Check if query matches conversation topic
-            topic_match = query.lower() in conversation["topic"].lower()
-            
-            # Check if query matches any message content
-            content_match = False
-            message_type_match = True
-            
-            for message_id in conversation["message_ids"]:
-                if message_id in self.messages:
-                    message = self.messages[message_id]
-                    
-                    # Check content match
-                    if query.lower() in message["content"].lower():
-                        content_match = True
-                    
-                    # Check message type match if needed
-                    if message_type_values and message["message_type"] not in message_type_values:
-                        message_type_match = False
-            
-            # Include if any match criteria
-            if (topic_match or content_match) and message_type_match:
-                # Create a copy with participants as list
-                conv_copy = conversation.copy()
-                conv_copy["participants"] = list(conv_copy["participants"])
-                results.append(conv_copy)
-        
-        # Sort by last updated time (newest first)
-        results.sort(key=lambda c: c["updated_at"], reverse=True)
-        
-        # Apply limit
-        return results[:limit]
-    
-    def get_metrics(self) -> Dict[str, Any]:
-        """Get communication metrics"""
-        return self.metrics
-    
-    def reset_metrics(self) -> None:
-        """Reset metrics counters"""
-        self.metrics = {
-            "messages_sent": 0,
-            "messages_received": 0,
-            "questions_asked": 0,
-            "questions_answered": 0,
-            "average_response_time": 0,
-            "total_response_time": 0,
-            "model_interactions": {
-                ModelType.QWEN.value: 0,
-                ModelType.OLYMPIC.value: 0,
-                ModelType.HYBRID.value: 0,
-                ModelType.SPECIALIZED.value: 0,
-                ModelType.SYSTEM.value: 0
+        # Add critique message
+        message = self.add_message(
+            conversation_id=conversation_id,
+            from_model=from_model_value,
+            to_model=to_model_value,
+            message_type=MessageType.CRITIQUE.value,
+            content=content,
+            metadata={
+                "target_message_id": target_message_id,
+                "context": context or {}
             }
-        }
+        )
         
-        logger.info("Communication metrics reset")
+        return message
+    
+    def collaborate(
+        self,
+        task: str,
+        models: List[Union[ModelType, str]],
+        mode: Union[CollaborationMode, str] = CollaborationMode.COLLABORATIVE,
+        context: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """
+        Initiate collaborative work between models
+        
+        Args:
+            task: Task description
+            models: Models to involve in collaboration
+            mode: Collaboration mode
+            context: Additional context
+            
+        Returns:
+            Collaboration setup information
+        """
+        # Convert model types to string if needed
+        model_values = []
+        for model in models:
+            if isinstance(model, ModelType):
+                model_values.append(model.value)
+            else:
+                # Validate model
+                try:
+                    ModelType(model)
+                    model_values.append(model)
+                except ValueError:
+                    logger.warning(f"Invalid model type: {model}")
+        
+        # Convert mode to string if needed
+        mode_value = mode.value if isinstance(mode, CollaborationMode) else mode
+        
+        # Validate mode
+        try:
+            collaboration_mode = CollaborationMode(mode_value)
+        except ValueError:
+            logger.error(f"Invalid collaboration mode: {mode_value}")
+            return {"error": f"Invalid collaboration mode: {mode_value}"}
+        
+        # Set current collaboration mode
+        self.collaboration_mode = collaboration_mode
+        
+        # Create a conversation for the collaboration
+        conversation_id = self.create_conversation(
+            topic=f"Collaboration: {task}",
+            participants=model_values + [ModelType.SYSTEM.value],
+            context=context
+        )
+        
+        # Add system message about the collaboration
+        self.add_message(
+            conversation_id=conversation_id,
+            from_model=ModelType.SYSTEM.value,
+            message_type=MessageType.SYSTEM.value,
+            content=f"Collaboration started in {mode_value} mode: {task}",
+            metadata={
+                "task": task,
+                "mode": mode_value,
+                "participants": model_values
+            }
+        )
+        
+        # Add task assignment message
+        if mode_value == CollaborationMode.COLLABORATIVE.value:
+            # All models work on the same task
+            message = f"All models should collaborate on the task: {task}"
+        
+        elif mode_value == CollaborationMode.SPECIALIZED.value:
+            # Split the task based on specialization
+            message = f"Task will be divided based on specialization: {task}"
+            
+            # Example specialization
+            for model in model_values:
+                if model == ModelType.QWEN.value:
+                    self.add_message(
+                        conversation_id=conversation_id,
+                        from_model=ModelType.SYSTEM.value,
+                        to_model=model,
+                        message_type=MessageType.SYSTEM.value,
+                        content=f"Your specialization: Planning and architecture for {task}"
+                    )
+                elif model == ModelType.OLYMPIC.value:
+                    self.add_message(
+                        conversation_id=conversation_id,
+                        from_model=ModelType.SYSTEM.value,
+                        to_model=model,
+                        message_type=MessageType.SYSTEM.value,
+                        content=f"Your specialization: Implementation and testing for {task}"
+                    )
+        
+        elif mode_value == CollaborationMode.COMPETITIVE.value:
+            # Models compete
+            message = f"All models should compete to provide the best solution for: {task}"
+        
+        # Add the mode-specific system message
+        self.add_message(
+            conversation_id=conversation_id,
+            from_model=ModelType.SYSTEM.value,
+            message_type=MessageType.SYSTEM.value,
+            content=message
+        )
+        
+        # Return collaboration information
+        return {
+            "conversation_id": conversation_id,
+            "mode": mode_value,
+            "participants": model_values,
+            "task": task
+        }
     
     def get_status(self) -> Dict[str, Any]:
-        """Get communication system status"""
+        """Get the status of the communication system"""
+        total_messages = self.stats["messages_sent"]
+        
+        # Calculate average response time
+        avg_response_time = 0
+        if "ANSWER" in self.stats["messages_by_type"] and self.stats["messages_by_type"]["ANSWER"] > 0:
+            # In a real implementation, this would be calculated from actual response times
+            # Here we just use a placeholder
+            avg_response_time = 1.5  # seconds
+        
         return {
-            "active_conversations": len([c for c in self.conversations.values() if c["status"] == "active"]),
-            "total_conversations": len(self.conversations),
-            "total_messages": len(self.messages),
-            "pending_messages": self.message_queue.qsize(),
-            "metrics": {
-                "messages_sent": self.metrics["messages_sent"],
-                "questions_asked": self.metrics["questions_asked"],
-                "questions_answered": self.metrics["questions_answered"],
-                "average_response_time": self.metrics["average_response_time"]
+            "operational": True,
+            "models": {
+                model: {"active": active}
+                for model, active in self.participants.items()
+            },
+            "collaboration_mode": self.collaboration_mode.value,
+            "conversations": len(self.conversations),
+            "stats": {
+                "total_messages": total_messages,
+                "messages_by_type": self.stats["messages_by_type"],
+                "messages_by_model": self.stats["messages_by_model"],
+                "average_response_time": avg_response_time
             }
-        }
-    
-    def get_detailed_status(self) -> Dict[str, Any]:
-        """Get detailed communication system status"""
-        # Count message states
-        message_states = {}
-        for state in MessageState:
-            message_states[state.value] = 0
-        
-        for message in self.messages.values():
-            state = message["state"]
-            message_states[state] = message_states.get(state, 0) + 1
-        
-        # Count message types
-        message_types = {}
-        for message_type in MessageType:
-            message_types[message_type.value] = 0
-        
-        for message in self.messages.values():
-            message_type = message["message_type"]
-            message_types[message_type] = message_types.get(message_type, 0) + 1
-        
-        return {
-            "active_conversations": len([c for c in self.conversations.values() if c["status"] == "active"]),
-            "closed_conversations": len([c for c in self.conversations.values() if c["status"] == "closed"]),
-            "archived_conversations": len([c for c in self.conversations.values() if c["status"] == "archived"]),
-            "total_conversations": len(self.conversations),
-            "total_messages": len(self.messages),
-            "pending_messages": self.message_queue.qsize(),
-            "message_states": message_states,
-            "message_types": message_types,
-            "metrics": self.metrics
         }
 
 # Initialize communication system
