@@ -163,7 +163,9 @@ export default function Dashboard() {
       conversationId: conversationId.current,
       role: 'user',
       content: userInput,
-      model: selectedModel === 'hybrid' ? 'hybrid' : (selectedModel === 'qwen' ? 'llama3' : 'gemma3')
+      model: selectedModel, // Use the actual model names as selected
+      userId: user?.id,
+      metadata: { timestamp: new Date().toISOString() }
     };
     
     // Add user message to state

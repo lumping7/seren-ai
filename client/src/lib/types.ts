@@ -3,7 +3,8 @@ export type AIMessage = {
   conversationId: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
-  model?: 'llama3' | 'gemma3' | 'hybrid';
+  model?: 'qwen' | 'olympic' | 'hybrid';
+  userId?: number;
   timestamp?: Date;
   metadata?: Record<string, any>;
 };
@@ -18,8 +19,8 @@ export type AIMemory = {
 };
 
 export type AIStatus = {
-  llama3: boolean;
-  gemma3: boolean;
+  qwen: boolean;
+  olympic: boolean;
   neuroSymbolic: boolean;
   memory: boolean;
   systemLoad: number;
@@ -33,7 +34,7 @@ export type FeatureFlags = {
 };
 
 export type ModelConfig = {
-  defaultModel: 'llama3' | 'gemma3' | 'hybrid';
+  defaultModel: 'qwen' | 'olympic' | 'hybrid';
   temperature: number;
   maxTokens: number;
 };
