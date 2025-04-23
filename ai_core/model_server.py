@@ -35,21 +35,13 @@ logging.basicConfig(
 logger = logging.getLogger("model_server")
 
 # Import conditional dependencies - these may or may not be available
-try:
-    import torch
-    HAS_TORCH = True
-    logger.info("PyTorch is available")
-except ImportError:
-    HAS_TORCH = False
-    logger.warning("PyTorch is not available, using fallback mechanisms")
+import torch
+HAS_TORCH = True
+logger.info("PyTorch is available")
 
-try:
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    HAS_TRANSFORMERS = True
-    logger.info("Transformers is available")
-except ImportError:
-    HAS_TRANSFORMERS = False
-    logger.warning("Transformers is not available, using fallback mechanisms")
+from transformers import AutoModelForCausalLM, AutoTokenizer
+HAS_TRANSFORMERS = True
+logger.info("Transformers is available")
 
 # Define fallback classes and functions
 from enum import Enum
@@ -255,36 +247,30 @@ def load_model():
     logger.info(f"Loading {model_type} model...")
     
     try:
-        if HAS_TRANSFORMERS and HAS_TORCH:
-            # This is a simplified implementation            
-            logger.info(f"Using transformers to load {model_type}")
-            
-            # Model selection based on type
-            model_id = "gpt2"  # Fallback model ID
-            
-            if "qwen" in model_type.lower():
-                model_id = "gpt2"  # Using fallback for demo
-            elif "olympic" in model_type.lower() or "coder" in model_type.lower():
-                model_id = "gpt2"  # Using fallback for demo
-                
-            logger.info(f"Using model ID: {model_id}")
-            
-            # Load tokenizer and model
-            tokenizer = AutoTokenizer.from_pretrained(model_id)
-            model = AutoModelForCausalLM.from_pretrained(
-                model_id,
-                torch_dtype=torch.float32,
-                low_cpu_mem_usage=True
-            )
-            
-            global_state["tokenizer"] = tokenizer
-            global_state["model"] = model
-            
-            logger.info(f"Model {model_type} loaded successfully")
-            return True
+        # Model selection based on type
+        if "qwen" in model_type.lower():
+            model_id = "Qwen/Qwen-7B"  # Actual model ID for production
+        elif "olympic" in model_type.lower() or "coder" in model_type.lower():
+            model_id = "TheBloke/CodeLlama-7B-HF"  # Actual model ID for production
         else:
-            logger.warning(f"PyTorch or Transformers not available, using fallback mode for {model_type}")
-            return True
+            model_id = "Qwen/Qwen-7B"  # Default to Qwen
+            
+        logger.info(f"Using model ID: {model_id}")
+        
+        # Load tokenizer and model
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.float16,  # Use float16 for efficiency
+            device_map="auto",  # Automatically use available devices
+            low_cpu_mem_usage=True
+        )
+        
+        global_state["tokenizer"] = tokenizer
+        global_state["model"] = model
+        
+        logger.info(f"Model {model_type} loaded successfully")
+        return True
     except Exception as e:
         logger.error(f"Failed to load model {model_type}: {e}")
         logger.error(traceback.format_exc())
@@ -774,90 +760,30 @@ Your review should be thorough and actionable, helping to improve the code quali
     # Helper methods for model interaction
     def _generate_text(self, prompt):
         """Generate text using the loaded model"""
-        # Check if transformers model is available
-        if global_state["model"] and global_state["tokenizer"] and HAS_TRANSFORMERS and HAS_TORCH:
-            logger.info("Generating text using transformers model")
+        if not global_state["model"] or not global_state["tokenizer"]:
+            logger.error("Model or tokenizer not available")
+            raise RuntimeError("Model or tokenizer not initialized - system cannot proceed without the required AI models")
             
-            try:
-                inputs = global_state["tokenizer"](prompt, return_tensors="pt")
-                
-                # Generate
-                outputs = global_state["model"].generate(
-                    **inputs,
-                    max_length=1024,
-                    temperature=0.7,
-                    top_p=0.9,
-                    do_sample=True
-                )
-                
-                # Decode
-                generated_text = global_state["tokenizer"].decode(outputs[0], skip_special_tokens=True)
-                
-                # Extract the generated part (exclude the prompt)
-                generated_text = generated_text[len(prompt):]
-                
-                return generated_text.strip()
-                
-            except Exception as e:
-                logger.error(f"Error generating with transformers: {e}")
-                logger.error(traceback.format_exc())
-                
-                # Fall back to rule-based generation
-                return self._fallback_generate(prompt)
-        else:
-            logger.info("Using fallback text generation")
-            return self._fallback_generate(prompt)
-    
-    def _fallback_generate(self, prompt):
-        """Fallback text generation when model is not available"""
-        task_type = ""
-        language = ""
+        logger.info("Generating text using transformers model")
         
-        # Very basic content extraction
-        if "architecture" in prompt.lower():
-            task_type = "architecture"
-        elif "code" in prompt.lower() and "generate" in prompt.lower():
-            task_type = "code"
-        elif "test" in prompt.lower():
-            task_type = "test"
-        elif "debug" in prompt.lower() or "fix" in prompt.lower():
-            task_type = "debug"
-        elif "review" in prompt.lower():
-            task_type = "review"
-        elif "explain" in prompt.lower():
-            task_type = "explain"
-        else:
-            task_type = "general"
-            
-        # Try to extract language
-        if "python" in prompt.lower():
-            language = "Python"
-        elif "javascript" in prompt.lower() or "js" in prompt.lower():
-            language = "JavaScript"
-        elif "typescript" in prompt.lower() or "ts" in prompt.lower():
-            language = "TypeScript"
-        elif "java" in prompt.lower():
-            language = "Java"
-        elif "c++" in prompt.lower():
-            language = "C++"
-        else:
-            language = "Unknown"
-            
-        # Generate basic response based on task type
-        if task_type == "architecture":
-            return self._generate_fallback_architecture()
-        elif task_type == "code":
-            return self._generate_fallback_code(language)
-        elif task_type == "test":
-            return self._generate_fallback_tests(language)
-        elif task_type == "debug":
-            return self._generate_fallback_debug(language)
-        elif task_type == "review":
-            return self._generate_fallback_review()
-        elif task_type == "explain":
-            return self._generate_fallback_explanation()
-        else:
-            return "I apologize, but I'm currently operating in fallback mode and cannot generate a detailed response for this specific request. The advanced AI models are not available at the moment."
+        inputs = global_state["tokenizer"](prompt, return_tensors="pt")
+        
+        # Generate
+        outputs = global_state["model"].generate(
+            **inputs,
+            max_length=1024,
+            temperature=0.7,
+            top_p=0.9,
+            do_sample=True
+        )
+        
+        # Decode
+        generated_text = global_state["tokenizer"].decode(outputs[0], skip_special_tokens=True)
+        
+        # Extract the generated part (exclude the prompt)
+        generated_text = generated_text[len(prompt):]
+        
+        return generated_text.strip()
     
     def _generate_fallback_architecture(self):
         """Generate fallback architecture document"""
