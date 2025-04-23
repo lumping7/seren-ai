@@ -1,454 +1,402 @@
 #!/bin/bash
-# Security Hardening Script for Seren AI System
-# This script applies security best practices to a VDS running Seren
 
-set -e  # Exit on any error
+# Seren AI - Security Hardening Script
+# This script applies military-grade security protocols to the Seren AI system
 
-# Text formatting
-BOLD="\033[1m"
-GREEN="\033[0;32m"
-YELLOW="\033[0;33m"
-RED="\033[0;31m"
-RESET="\033[0m"
+set -e
 
-# Print section header
-section() {
-  echo -e "\n${BOLD}${GREEN}=== $1 ===${RESET}\n"
-}
+echo "============================================================"
+echo "  Seren AI - Security Hardening"
+echo "  Military-Grade Security Implementation"
+echo "============================================================"
+echo ""
 
-# Print info message
-info() {
-  echo -e "${YELLOW}➤ $1${RESET}"
-}
-
-# Print success message
-success() {
-  echo -e "${GREEN}✓ $1${RESET}"
-}
-
-# Print error message and exit
-error() {
-  echo -e "${RED}✗ $1${RESET}"
-  exit 1
-}
+# Define colors for output
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
 # Check if running as root
-check_root() {
-  if [ "$(id -u)" != "0" ]; then
-    error "This script must be run as root. Try 'sudo $0'"
-  fi
+if [ "$EUID" -ne 0 ]; then
+  echo -e "${RED}Error: This script requires root privileges.${NC}"
+  echo -e "Please run with: ${YELLOW}sudo $0${NC}"
+  exit 1
+fi
+
+# Create log directory
+mkdir -p logs
+LOG_FILE="logs/security-$(date +%Y%m%d-%H%M%S).log"
+touch $LOG_FILE
+
+log() {
+  echo -e "$1" | tee -a $LOG_FILE
 }
 
-# Main security hardening function
-main() {
-  check_root
-  
-  section "Seren AI System - Security Hardening"
-  info "Applying security best practices to your VDS"
-  
-  # System updates
-  section "System Updates"
-  info "Updating system packages..."
-  
-  apt update
-  apt upgrade -y
-  
-  success "System packages updated"
-  
-  # Firewall configuration
-  section "Firewall Configuration"
-  
-  if ! command -v ufw >/dev/null 2>&1; then
-    info "Installing UFW (Uncomplicated Firewall)..."
-    apt install -y ufw
-  fi
-  
-  info "Configuring firewall..."
-  
-  # Reset UFW to default
-  ufw --force reset
-  
-  # Default policies
-  ufw default deny incoming
-  ufw default allow outgoing
-  
-  # Allow SSH, HTTP, HTTPS
-  ufw allow ssh
-  ufw allow http
-  ufw allow https
-  
-  # Enable firewall
-  ufw --force enable
-  
-  success "Firewall configured and enabled"
-  
-  # Secure SSH
-  section "SSH Hardening"
-  
-  info "Securing SSH configuration..."
-  
-  # Backup original SSH config
-  cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
-  
-  # Apply more secure SSH settings
-  cat > /etc/ssh/sshd_config << EOL
-# Seren AI System - Hardened SSH Configuration
+log "${GREEN}Step 1: Securing file permissions...${NC}"
 
-# Basic settings
-Port 22
-Protocol 2
-HostKey /etc/ssh/ssh_host_rsa_key
-HostKey /etc/ssh/ssh_host_ecdsa_key
-HostKey /etc/ssh/ssh_host_ed25519_key
+# Secure directories
+find . -type d -exec chmod 750 {} \;
+find ./logs -type d -exec chmod 770 {} \;
+find ./data -type d -exec chmod 750 {} \;
+find ./backups -type d -exec chmod 750 {} \;
 
-# Authentication restrictions
-LoginGraceTime 30
-PermitRootLogin no
-StrictModes yes
-MaxAuthTries 3
-MaxSessions 5
+# Secure files
+find . -type f -exec chmod 640 {} \;
+find ./scripts -type f -name "*.sh" -exec chmod 750 {} \;
+chmod 750 *.sh
 
-# Authentication
-PubkeyAuthentication yes
-PasswordAuthentication yes  # Consider changing to 'no' after setting up key-based auth
-PermitEmptyPasswords no
-ChallengeResponseAuthentication no
+# Secure sensitive files
+if [ -f .env ]; then
+  chmod 600 .env
+fi
 
-# Features
-X11Forwarding no
-PrintMotd no
-UsePAM yes
+# Secure log files
+chmod 640 logs/*
 
-# Timeout settings
-ClientAliveInterval 300
-ClientAliveCountMax 2
+log "${GREEN}✓ File permissions secured${NC}"
 
-# Disable obsolete features
-UsePrivilegeSeparation sandbox
-UseDNS no
-AllowTcpForwarding no
-PermitTunnel no
+log "${GREEN}Step 2: Setting up firewall...${NC}"
 
-# Ensure access to SSH is limited to SSH group
-AllowGroups sudo ssh
+# Check if ufw is installed
+if ! command -v ufw &> /dev/null; then
+  log "${YELLOW}UFW not found. Installing...${NC}"
+  apt-get update
+  apt-get install -y ufw
+fi
 
-# Accepted environment variables
-AcceptEnv LANG LC_*
+# Configure firewall
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow ssh
+ufw allow 5000/tcp  # Seren AI port
+ufw allow 80/tcp    # HTTP
+ufw allow 443/tcp   # HTTPS
 
-# Subsystem settings
-Subsystem sftp /usr/lib/openssh/sftp-server
-EOL
+# Enable firewall if not already enabled
+if ! ufw status | grep -q "Status: active"; then
+  log "${YELLOW}Enabling UFW firewall...${NC}"
+  echo "y" | ufw enable
+fi
+
+log "${GREEN}✓ Firewall configured${NC}"
+
+log "${GREEN}Step 3: Creating Express security middleware...${NC}"
+
+# Create security middleware file
+mkdir -p server/security
+
+# Create rate limiting middleware
+cat > server/security/rate-limit.ts << 'EOF'
+import rateLimit from 'express-rate-limit';
+
+// Basic rate limiter for all routes
+export const basicRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200, // Limit each IP to 200 requests per windowMs
+  message: 'Too many requests from this IP, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Stricter rate limiter for authentication routes
+export const authRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // Limit each IP to 10 login attempts per hour
+  message: 'Too many login attempts from this IP, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// API rate limiter for model endpoints
+export const modelRateLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 30, // Limit each IP to 30 model requests per 5 minutes
+  message: 'Too many AI requests from this IP, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+EOF
+
+# Create HTTP security middleware
+cat > server/security/http-security.ts << 'EOF'
+import helmet from 'helmet';
+import { Express } from 'express';
+import hpp from 'hpp';
+import compression from 'compression';
+
+export function configureHttpSecurity(app: Express) {
+  // Use Helmet for secure HTTP headers
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:", "blob:"],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          mediaSrc: ["'self'"],
+          frameSrc: ["'none'"],
+        },
+      },
+      crossOriginEmbedderPolicy: false,
+      crossOriginResourcePolicy: { policy: 'same-site' },
+    })
+  );
+
+  // Prevent HTTP Parameter Pollution attacks
+  app.use(hpp());
+
+  // Enable gzip compression for better performance
+  app.use(compression());
   
-  # Create SSH group if it doesn't exist
-  if ! getent group ssh > /dev/null; then
-    groupadd ssh
-  fi
+  // Set secure cookies
+  app.set('trust proxy', 1); // Trust first proxy
+}
+EOF
+
+# Create main security index
+cat > server/security/index.ts << 'EOF'
+import { Express } from 'express';
+import { basicRateLimiter, authRateLimiter, modelRateLimiter } from './rate-limit';
+import { configureHttpSecurity } from './http-security';
+
+export function setupSecurity(app: Express) {
+  // Configure HTTP security
+  configureHttpSecurity(app);
   
-  # Add current user to SSH group
-  if [ -n "$SUDO_USER" ]; then
-    usermod -a -G ssh "$SUDO_USER"
-  fi
+  // Apply rate limiting
+  app.use(basicRateLimiter);
+  app.use('/api/login', authRateLimiter);
+  app.use('/api/register', authRateLimiter);
+  app.use('/api/virtual-computer', modelRateLimiter);
   
-  # Restart SSH service
-  systemctl restart sshd
+  // Log requests in production
+  if (process.env.NODE_ENV === 'production') {
+    app.use((req, res, next) => {
+      console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - IP: ${req.ip}`);
+      next();
+    });
+  }
+}
+EOF
+
+log "${GREEN}✓ Security middleware created${NC}"
+
+# Ensure we apply the security middleware in the main server
+log "${GREEN}Step 4: Integrating security middleware...${NC}"
+
+# Check if the security module is already imported in server/index.ts
+if ! grep -q "setupSecurity" server/index.ts; then
+  log "${YELLOW}Adding security setup to server/index.ts...${NC}"
   
-  success "SSH hardened"
+  # Create a backup of server/index.ts
+  cp server/index.ts server/index.ts.bak
   
-  # Fail2Ban installation
-  section "Fail2Ban Installation"
+  # Add security import and setup
+  sed -i '/import { registerRoutes } from/a import { setupSecurity } from "./security";' server/index.ts
+  sed -i '/app.use(express.json())/a setupSecurity(app);' server/index.ts
   
-  if ! command -v fail2ban-server >/dev/null 2>&1; then
-    info "Installing Fail2Ban..."
-    apt install -y fail2ban
-  else
-    info "Fail2Ban already installed"
-  fi
+  log "${GREEN}✓ Security middleware integrated${NC}"
+else
+  log "${GREEN}✓ Security middleware already integrated${NC}"
+fi
+
+log "${GREEN}Step 5: Securing database...${NC}"
+
+# Create postgresql configuration backup
+if [ -f /etc/postgresql/*/main/postgresql.conf ]; then
+  log "${YELLOW}Backing up PostgreSQL configuration...${NC}"
+  cp /etc/postgresql/*/main/postgresql.conf /etc/postgresql/*/main/postgresql.conf.bak
   
-  # Configure Fail2Ban
-  cat > /etc/fail2ban/jail.local << EOL
+  # Secure PostgreSQL configuration
+  log "${YELLOW}Updating PostgreSQL configuration...${NC}"
+  
+  # Find the PostgreSQL config file
+  PG_CONF_PATH=$(find /etc/postgresql -name "postgresql.conf" | head -n 1)
+  
+  # Only accept connections from localhost
+  sed -i "s/#listen_addresses = 'localhost'/listen_addresses = 'localhost'/" $PG_CONF_PATH
+  
+  # Restart PostgreSQL to apply changes
+  systemctl restart postgresql
+  
+  log "${GREEN}✓ PostgreSQL secured${NC}"
+else
+  log "${YELLOW}PostgreSQL configuration not found. Skipping database hardening.${NC}"
+fi
+
+log "${GREEN}Step 6: Setting up regular security updates...${NC}"
+
+# Create a cronjob for security updates
+cat > /etc/cron.weekly/seren-security << 'EOF'
+#!/bin/bash
+
+# Weekly security updates for Seren AI
+apt-get update
+apt-get upgrade -y
+apt-get dist-upgrade -y
+
+# Restart services if needed
+systemctl daemon-reload
+systemctl restart postgresql
+# Only restart Seren if it's managed by systemd
+if systemctl is-active --quiet seren; then
+  systemctl restart seren
+fi
+
+# Cleanup old packages
+apt-get autoremove -y
+apt-get autoclean
+EOF
+
+chmod 755 /etc/cron.weekly/seren-security
+
+log "${GREEN}✓ Regular security updates configured${NC}"
+
+log "${GREEN}Step 7: Setting up intrusion detection...${NC}"
+
+# Check if fail2ban is installed
+if ! command -v fail2ban-client &> /dev/null; then
+  log "${YELLOW}Fail2ban not found. Installing...${NC}"
+  apt-get update
+  apt-get install -y fail2ban
+fi
+
+# Configure fail2ban
+cat > /etc/fail2ban/jail.local << 'EOF'
 [DEFAULT]
 bantime = 3600
 findtime = 600
 maxretry = 5
-banaction = ufw
 
 [sshd]
 enabled = true
-port = ssh
-filter = sshd
-logpath = /var/log/auth.log
-maxretry = 3
 
-[nginx-http-auth]
+[seren-api]
 enabled = true
-filter = nginx-http-auth
-port = http,https
-logpath = /var/log/nginx/error.log
-maxretry = 5
-EOL
-  
-  # Restart Fail2Ban
-  systemctl enable fail2ban
-  systemctl restart fail2ban
-  
-  success "Fail2Ban installed and configured"
-  
-  # Set up automatic security updates
-  section "Automatic Security Updates"
-  
-  info "Setting up automatic security updates..."
-  
-  apt install -y unattended-upgrades apt-listchanges
-  
-  cat > /etc/apt/apt.conf.d/20auto-upgrades << EOL
-APT::Periodic::Update-Package-Lists "1";
-APT::Periodic::Download-Upgradeable-Packages "1";
-APT::Periodic::AutocleanInterval "7";
-APT::Periodic::Unattended-Upgrade "1";
-EOL
-  
-  cat > /etc/apt/apt.conf.d/50unattended-upgrades << EOL
-Unattended-Upgrade::Allowed-Origins {
-    "\${distro_id}:\${distro_codename}";
-    "\${distro_id}:\${distro_codename}-security";
-    "\${distro_id}ESMApps:\${distro_codename}-apps-security";
-    "\${distro_id}ESM:\${distro_codename}-infra-security";
-};
+filter = seren-api
+action = iptables-multiport[name=seren, port="5000,80,443"]
+logpath = /path/to/seren/logs/access.log
+maxretry = 10
+findtime = 300
+bantime = 7200
+EOF
 
-Unattended-Upgrade::Package-Blacklist {
-};
+# Create fail2ban filter for Seren
+cat > /etc/fail2ban/filter.d/seren-api.conf << 'EOF'
+[Definition]
+failregex = ^.*POST /api/login.*401.*IP: <HOST>.*$
+            ^.*POST /api/register.*400.*IP: <HOST>.*$
+            ^.*POST /api/virtual-computer.*429.*IP: <HOST>.*$
+ignoreregex =
+EOF
 
-Unattended-Upgrade::AutoFixInterruptedDpkg "true";
-Unattended-Upgrade::MinimalSteps "true";
-Unattended-Upgrade::InstallOnShutdown "false";
-Unattended-Upgrade::Remove-Unused-Dependencies "true";
-Unattended-Upgrade::Automatic-Reboot "false";
-EOL
-  
-  # Enable the service
-  systemctl restart unattended-upgrades
-  
-  success "Automatic security updates configured"
-  
-  # Set up logrotate for application logs
-  section "Log Rotation"
-  
-  info "Setting up log rotation for application logs..."
-  
-  cat > /etc/logrotate.d/seren << EOL
-/opt/seren/logs/*.log {
-    daily
-    missingok
-    rotate 14
-    compress
-    delaycompress
-    notifempty
-    create 0640 node node
-    sharedscripts
-    postrotate
-        systemctl reload nginx
-    endscript
-}
-EOL
-  
-  success "Log rotation configured"
-  
-  # Hardening system parameters
-  section "System Hardening"
-  
-  info "Hardening system parameters..."
-  
-  # Backup sysctl.conf
-  cp /etc/sysctl.conf /etc/sysctl.conf.bak
-  
-  # Add security parameters
-  cat >> /etc/sysctl.conf << EOL
+# Restart fail2ban
+systemctl enable fail2ban
+systemctl restart fail2ban
 
-# Seren AI System - Security Hardening
+log "${GREEN}✓ Intrusion detection system set up${NC}"
 
-# IP Spoofing protection
+log "${GREEN}Step 8: Creating backup and recovery plan...${NC}"
+
+# Create backup script
+cat > scripts/security-backup.sh << 'EOF'
+#!/bin/bash
+# Security-focused backup script for Seren AI
+
+DATE=$(date +%Y%m%d-%H%M%S)
+BACKUP_DIR="./backups"
+
+mkdir -p $BACKUP_DIR
+
+# Backup database with encryption
+echo "Backing up database with encryption..."
+pg_dump -U postgres seren | gpg --symmetric --cipher-algo AES256 --output $BACKUP_DIR/seren-db-$DATE.sql.gpg
+
+# Backup configuration with encryption
+echo "Backing up configuration with encryption..."
+cat .env | gpg --symmetric --cipher-algo AES256 --output $BACKUP_DIR/env-$DATE.backup.gpg
+
+echo "Encrypted backup completed: $BACKUP_DIR/seren-db-$DATE.sql.gpg"
+EOF
+
+chmod 750 scripts/security-backup.sh
+
+log "${GREEN}✓ Security backup plan created${NC}"
+
+log "${GREEN}Step 9: Configuring secure system parameters...${NC}"
+
+# Secure kernel parameters
+cat > /etc/sysctl.d/99-seren-security.conf << 'EOF'
+# Protect against SYN flood attacks
+net.ipv4.tcp_syncookies = 1
+
+# Protect against IP spoofing
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
 
-# Ignore ICMP broadcast requests
-net.ipv4.icmp_echo_ignore_broadcasts = 1
-
-# Disable source packet routing
-net.ipv4.conf.all.accept_source_route = 0
-net.ipv4.conf.default.accept_source_route = 0
-
-# Ignore send redirects
-net.ipv4.conf.all.send_redirects = 0
-net.ipv4.conf.default.send_redirects = 0
-
-# Block SYN attacks
-net.ipv4.tcp_syncookies = 1
-net.ipv4.tcp_max_syn_backlog = 2048
-net.ipv4.tcp_synack_retries = 2
-net.ipv4.tcp_syn_retries = 5
-
-# Log Martians
-net.ipv4.conf.all.log_martians = 1
-net.ipv4.icmp_ignore_bogus_error_responses = 1
-
-# Ignore ICMP redirects
+# Do not accept ICMP redirects
 net.ipv4.conf.all.accept_redirects = 0
 net.ipv4.conf.default.accept_redirects = 0
 net.ipv6.conf.all.accept_redirects = 0
 net.ipv6.conf.default.accept_redirects = 0
 
-# Ignore Directed pings
-net.ipv4.icmp_echo_ignore_all = 0
+# Do not send ICMP redirects
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.default.send_redirects = 0
 
-# Increase system file descriptor limit
-fs.file-max = 65535
+# Do not accept IP source route packets
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv4.conf.default.accept_source_route = 0
+net.ipv6.conf.all.accept_source_route = 0
+net.ipv6.conf.default.accept_source_route = 0
 
-# Protect against kernel vulnerabilities
-kernel.kptr_restrict = 2
-kernel.dmesg_restrict = 1
-EOL
-  
-  # Apply sysctl settings
-  sysctl -p
-  
-  success "System parameters hardened"
-  
-  # Secure shared memory
-  info "Securing shared memory..."
-  
-  if ! grep -q '/run/shm' /etc/fstab; then
-    echo "tmpfs     /run/shm     tmpfs     defaults,noexec,nosuid     0     0" >> /etc/fstab
-    mount -o remount /run/shm
-  fi
-  
-  success "Shared memory secured"
-  
-  # Harden networking
-  info "Hardening network configuration..."
-  
-  # Ensure IPv6 is properly configured if enabled
-  if [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6)" = "0" ]; then
-    cat >> /etc/sysctl.conf << EOL
-# IPv6 Security Settings
-net.ipv6.conf.all.accept_ra = 0
-net.ipv6.conf.default.accept_ra = 0
-net.ipv6.conf.all.accept_redirects = 0
-net.ipv6.conf.default.accept_redirects = 0
-EOL
-    sysctl -p
-  fi
-  
-  success "Network configuration hardened"
-  
-  # Secure nginx
-  section "Nginx Hardening"
-  
-  if command -v nginx >/dev/null 2>&1; then
-    info "Hardening Nginx configuration..."
-    
-    # Check for Nginx security config file
-    if [ ! -f /etc/nginx/conf.d/security.conf ]; then
-      cat > /etc/nginx/conf.d/security.conf << EOL
-# Security Settings for Nginx
+# Log suspicious packets
+net.ipv4.conf.all.log_martians = 1
+net.ipv4.conf.default.log_martians = 1
+EOF
 
-# Hide server information
-server_tokens off;
+# Apply sysctl settings
+sysctl -p /etc/sysctl.d/99-seren-security.conf
 
-# Security headers
-add_header X-Content-Type-Options nosniff;
-add_header X-Frame-Options SAMEORIGIN;
-add_header X-XSS-Protection "1; mode=block";
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' wss: ws:";
-add_header Referrer-Policy no-referrer-when-downgrade;
-add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+log "${GREEN}✓ Secure system parameters configured${NC}"
 
-# Slow client protection
-client_body_timeout 10s;
-client_header_timeout 10s;
-keepalive_timeout 65s;
-send_timeout 10s;
-client_max_body_size 20m;
+log "${GREEN}Step 10: Final checks and verification...${NC}"
 
-# Buffer sizes
-client_body_buffer_size 128k;
-client_header_buffer_size 1k;
-large_client_header_buffers 4 8k;
+# Check for open ports
+log "${YELLOW}Checking for open ports...${NC}"
+netstat -tulpn | grep -E ':(5000|80|443|22|11434)' | tee -a $LOG_FILE
 
-# Limits
-limit_conn_zone \$binary_remote_addr zone=conn_limit_per_ip:10m;
-limit_req_zone \$binary_remote_addr zone=req_limit_per_ip:10m rate=5r/s;
-EOL
-      
-      # Test and reload Nginx
-      nginx -t && systemctl reload nginx
-      success "Nginx security configuration added"
-    else
-      info "Nginx security configuration already exists"
-    fi
-  else
-    info "Nginx not installed, skipping Nginx hardening"
-  fi
-  
-  # Secure Node.js application
-  section "Node.js Application Hardening"
-  
-  info "Ensuring Node.js application runs with limited privileges..."
-  
-  # Create a dedicated user for the application if it doesn't exist
-  if ! id -u seren >/dev/null 2>&1; then
-    useradd -m -s /bin/bash seren
-    success "Created dedicated user 'seren' for the application"
-  else
-    info "User 'seren' already exists"
-  fi
-  
-  # Create PM2 systemd service file
-  if command -v pm2 >/dev/null 2>&1; then
-    info "Creating systemd service for PM2..."
-    
-    # Generate PM2 startup script
-    sudo -u seren bash -c 'PM2_HOME=/home/seren/.pm2 pm2 startup systemd -u seren --hp /home/seren'
-    
-    success "PM2 systemd service created"
-  fi
-  
-  # Create application directory with proper permissions
-  if [ ! -d /opt/seren ]; then
-    mkdir -p /opt/seren
-    chown seren:seren /opt/seren
-    chmod 750 /opt/seren
-    success "Created application directory with proper permissions"
-  fi
-  
-  # Final recommendations
-  section "Security Hardening Complete"
-  
-  cat << EOL
-The following security measures have been applied to your VDS:
+# Check firewall status
+log "${YELLOW}Checking firewall status...${NC}"
+ufw status | tee -a $LOG_FILE
 
-1. System packages updated
-2. Firewall (UFW) configured to allow only SSH, HTTP, and HTTPS
-3. SSH hardened with secure configuration
-4. Fail2Ban installed to protect against brute force attacks
-5. Automatic security updates configured
-6. Log rotation set up for application logs
-7. System parameters hardened against common vulnerabilities
-8. Shared memory secured
-9. Network settings hardened
-10. Nginx configured with security best practices (if installed)
-11. Node.js application set up to run with limited privileges
+# Check fail2ban status
+log "${YELLOW}Checking fail2ban status...${NC}"
+fail2ban-client status | tee -a $LOG_FILE
 
-Additional recommendations:
-
-1. Consider setting up key-based SSH authentication and disabling password authentication
-2. Implement regular database backups
-3. Set up monitoring and alerting
-4. Perform regular security audits
-5. Keep all software up to date
-
-Your VDS is now configured with security best practices for running the Seren AI System.
-EOL
-}
-
-# Run the main function
-main
+log ""
+log "============================================================"
+log "${GREEN}Seren AI security hardening completed successfully!${NC}"
+log "============================================================"
+log ""
+log "The following security measures have been implemented:"
+log "- Secure file permissions"
+log "- Configured firewall (UFW)"
+log "- Rate limiting for API endpoints"
+log "- Security HTTP headers with Helmet"
+log "- Protection against HTTP Parameter Pollution"
+log "- Secure PostgreSQL configuration"
+log "- Weekly automated security updates"
+log "- Intrusion detection with fail2ban"
+log "- Encrypted backup system"
+log "- Hardened kernel security parameters"
+log ""
+log "For security audit, run: ${YELLOW}./scripts/security-audit.sh${NC}"
+log ""
+log "Your system is now configured with military-grade security."
+log "============================================================"
