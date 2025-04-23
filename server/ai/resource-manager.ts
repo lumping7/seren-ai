@@ -9,7 +9,7 @@ import os from 'os';
 import { errorHandler, ErrorCategory } from './error-handler';
 
 // Resource types
-export type ResourceType = 'llama3_inference' | 'gemma3_inference' | 'hybrid_inference' | 'reasoning' | 'system';
+export type ResourceType = 'qwen_inference' | 'olympic_inference' | 'hybrid_inference' | 'reasoning' | 'system';
 
 // Request priority levels
 export type PriorityLevel = 'high' | 'normal' | 'low';
@@ -102,7 +102,7 @@ class ResourceManager {
           max_pending_requests: 100,
           token_rate_limit: 50000
         },
-        'llama3_inference': {
+        'qwen_inference': {
           max_concurrent_operations: 8,
           memory_usage_percentage: 80,
           cpu_usage_percentage: 80,
@@ -110,7 +110,7 @@ class ResourceManager {
           max_pending_requests: 20,
           token_rate_limit: 20000
         },
-        'gemma3_inference': {
+        'olympic_inference': {
           max_concurrent_operations: 10,
           memory_usage_percentage: 80,
           cpu_usage_percentage: 80,
@@ -150,7 +150,7 @@ class ResourceManager {
           max_pending_requests: 200,
           token_rate_limit: 100000
         },
-        'llama3_inference': {
+        'qwen_inference': {
           max_concurrent_operations: 20,
           memory_usage_percentage: 85,
           cpu_usage_percentage: 85,
@@ -158,7 +158,7 @@ class ResourceManager {
           max_pending_requests: 40,
           token_rate_limit: 40000
         },
-        'gemma3_inference': {
+        'olympic_inference': {
           max_concurrent_operations: 25,
           memory_usage_percentage: 85,
           cpu_usage_percentage: 85,
