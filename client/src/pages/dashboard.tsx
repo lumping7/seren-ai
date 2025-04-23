@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { useTheme } from '@/components/providers/theme-provider';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { connectWebSocket, sendChatMessage, registerMessageHandler } from '@/lib/websocket';
@@ -77,6 +78,7 @@ import { Input } from '@/components/ui/input';
 export default function Dashboard() {
   const { user, logoutMutation } = useAuth();
   const { toast } = useToast();
+  const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState('overview');
   const [chatMessages, setChatMessages] = useState<AIMessage[]>([
     {
@@ -1046,35 +1048,61 @@ export default function Dashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">AI Core</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <div className="font-medium">Response Quality</div>
-                      <Select defaultValue="balanced">
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select quality level" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="fast">Fast (Lower Quality)</SelectItem>
-                          <SelectItem value="balanced">Balanced</SelectItem>
-                          <SelectItem value="high">High Quality (Slower)</SelectItem>
-                        </SelectContent>
-                      </Select>
+                <div className="space-y-6">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Display</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <div className="font-medium">Theme</div>
+                        <Select value={theme} onValueChange={setTheme}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select theme" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="dark">Dark (Default)</SelectItem>
+                            <SelectItem value="light">Light</SelectItem>
+                            <SelectItem value="system">System</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-sm text-muted-foreground">
+                          The dark theme uses sleek black and purple styling for military-grade aesthetics.
+                        </p>
+                      </div>
                     </div>
-                    
-                    <div className="space-y-2">
-                      <div className="font-medium">Memory Retention</div>
-                      <Select defaultValue="medium">
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select retention level" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="low">Low (Session-Only)</SelectItem>
-                          <SelectItem value="medium">Medium (Days)</SelectItem>
-                          <SelectItem value="high">High (Persistent)</SelectItem>
-                        </SelectContent>
-                      </Select>
+                  </div>
+
+                  <Separator />
+                  
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">AI Core</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <div className="font-medium">Response Quality</div>
+                        <Select defaultValue="balanced">
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select quality level" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="fast">Fast (Lower Quality)</SelectItem>
+                            <SelectItem value="balanced">Balanced</SelectItem>
+                            <SelectItem value="high">High Quality (Slower)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="font-medium">Memory Retention</div>
+                        <Select defaultValue="medium">
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select retention level" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="low">Low (Session-Only)</SelectItem>
+                            <SelectItem value="medium">Medium (Days)</SelectItem>
+                            <SelectItem value="high">High (Persistent)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </div>
                 </div>
