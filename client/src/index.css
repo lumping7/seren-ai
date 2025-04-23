@@ -4,25 +4,25 @@
 
 :root {
   /* Light theme (default) */
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --primary: 266 100% 50%; /* Purple */
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --popover: 210 40% 98%;
+  --popover-foreground: 222 47% 11%;
+  --card: 210 40% 98%;
+  --card-foreground: 222 47% 11%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --primary: 262 83% 58%; /* Vibrant purple */
   --primary-foreground: 0 0% 100%;
-  --secondary: 240 4.8% 95.9%;
-  --secondary-foreground: 240 5.9% 10%;
-  --accent: 265 90% 35%; /* Darker purple */
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --accent: 263 70% 50%; /* Balanced purple */
   --accent-foreground: 0 0% 100%;
-  --destructive: 0 84.2% 60.2%;
+  --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
-  --ring: 266 100% 50%; /* Purple */
+  --ring: 262 83% 58%; /* Vibrant purple */
   --radius: 0.5rem;
   
   /* Chart colors */
@@ -45,25 +45,25 @@
 
 .dark {
   /* Dark theme (black and purple) */
-  --background: 0 0% 3%; /* Almost black */
-  --foreground: 0 0% 98%;
-  --muted: 0 0% 15%;
-  --muted-foreground: 240 5% 64.9%;
-  --popover: 0 0% 5%;
-  --popover-foreground: 0 0% 98%;
-  --card: 0 0% 8%;
-  --card-foreground: 0 0% 98%;
-  --border: 0 0% 20%;
-  --input: 0 0% 20%;
-  --primary: 266 100% 50%; /* Vibrant purple */
-  --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 15%;
-  --secondary-foreground: 0 0% 98%;
-  --accent: 265 90% 35%; /* Darker purple */
-  --accent-foreground: 0 0% 100%;
-  --destructive: 0 62.8% 40.6%;
-  --destructive-foreground: 0 0% 98%;
-  --ring: 266 100% 50%; /* Purple */
+  --background: 224 71% 4%;
+  --foreground: 213 31% 91%;
+  --muted: 223 47% 11%;
+  --muted-foreground: 215 20% 65%;
+  --popover: 224 71% 4%;
+  --popover-foreground: 215 20% 65%;
+  --card: 224 71% 4%;
+  --card-foreground: 213 31% 91%;
+  --border: 216 34% 17%;
+  --input: 216 34% 17%;
+  --primary: 263 85% 60%; /* Vibrant purple */
+  --primary-foreground: 210 40% 98%;
+  --secondary: 222 47% 11%;
+  --secondary-foreground: 210 40% 98%;
+  --accent: 263 85% 50%; /* Balanced purple */
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 63% 31%;
+  --destructive-foreground: 210 40% 98%;
+  --ring: 263 85% 60%; /* Vibrant purple */
   --radius: 0.5rem;
   
   /* Chart colors */
@@ -74,14 +74,14 @@
   --chart-5: 190 100% 65%;
   
   /* Sidebar */
-  --sidebar-background: 0 0% 5%;
-  --sidebar-foreground: 0 0% 98%;
-  --sidebar-primary: 266 100% 50%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 265 90% 35%;
-  --sidebar-accent-foreground: 0 0% 100%;
-  --sidebar-border: 0 0% 20%;
-  --sidebar-ring: 266 100% 50%;
+  --sidebar-background: 222 47% 6%;
+  --sidebar-foreground: 213 31% 91%;
+  --sidebar-primary: 263 85% 60%;
+  --sidebar-primary-foreground: 210 40% 98%;
+  --sidebar-accent: 263 70% 50%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-border: 216 34% 17%;
+  --sidebar-ring: 263 85% 60%;
 }
 
 @layer base {
@@ -182,10 +182,72 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-muted rounded-full;
+  @apply bg-muted rounded-full transition-colors;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/50;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  @apply bg-muted hover:bg-primary/50;
+  @apply bg-muted transition-colors;
 }
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  @apply bg-primary/50;
+}
+
+/* Glass effect */
+.glass {
+  @apply bg-background/80 backdrop-blur-md border border-border/50;
+}
+
+.dark .glass {
+  @apply bg-background/60 border-border/30;
+}
+
+/* Fancy focus ring */
+.focus-ring {
+  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-shadow duration-200;
+}
+
+.dark .focus-ring {
+  @apply focus-visible:ring-offset-background;
+}
+
+/* Card hover effect */
+.card-hover {
+  @apply transition-all duration-200 hover:shadow-md hover:-translate-y-1;
+}
+
+.dark .card-hover {
+  @apply hover:shadow-primary/10;
+}
+
+/* Subtle animations */
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.slide-in-bottom {
+  animation: slideInBottom 0.3s ease-out;
+}
+
+@keyframes slideInBottom {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Brand colors for syntax highlighting */
+.syntax-string { @apply text-green-600 dark:text-green-400; }
+.syntax-number { @apply text-orange-600 dark:text-orange-400; }
+.syntax-keyword { @apply text-purple-600 dark:text-purple-400; }
+.syntax-function { @apply text-blue-600 dark:text-blue-400; }
+.syntax-comment { @apply text-gray-500 dark:text-gray-400; }
+.syntax-property { @apply text-indigo-600 dark:text-indigo-400; }
 
