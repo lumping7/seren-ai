@@ -20,8 +20,8 @@ export function ChatPanel() {
       {
         conversationId,
         role: "system",
-        content: "NeurAI system initialized with Llama3 and Gemma3 models. Neuro-symbolic reasoning module active.\n\nWhat would you like to work on today?",
-        model: "llama3",
+        content: "Seren system initialized with Qwen2.5-7b-omni and OlympicCoder-7B models. Neuro-symbolic reasoning module active.\n\nWhat would you like to work on today?",
+        model: "qwen",
         timestamp: new Date(),
       }
     ]);

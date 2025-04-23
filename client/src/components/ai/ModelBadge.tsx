@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type ModelType = 'llama3' | 'gemma3' | 'hybrid' | 'system';
+type ModelType = 'qwen' | 'olympic' | 'hybrid' | 'system';
 
 interface ModelBadgeProps {
   model: ModelType;
@@ -10,16 +10,16 @@ interface ModelBadgeProps {
 export function ModelBadge({ model, className }: ModelBadgeProps) {
   const baseClasses = "inline-flex items-center text-xs";
   const modelClasses = {
-    llama3: "model-badge llama",
-    gemma3: "model-badge gemma",
+    qwen: "model-badge qwen",
+    olympic: "model-badge olympic",
     hybrid: "model-badge hybrid",
     system: "model-badge system",
   };
   
   return (
     <span className={cn(baseClasses, modelClasses[model], className)}>
-      {model === 'llama3' ? 'Llama3' : 
-       model === 'gemma3' ? 'Gemma3' : 
+      {model === 'qwen' ? 'Qwen2.5-7b-omni' : 
+       model === 'olympic' ? 'OlympicCoder-7B' : 
        model === 'hybrid' ? 'Hybrid' : 'System'}
     </span>
   );
