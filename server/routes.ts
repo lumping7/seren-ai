@@ -219,8 +219,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               let aiResponseText = '';
               
               try {
-                // Import the direct generation module
-                const { generateText, ModelType } = await import('./ai/direct-generation');
+                // Import the offline direct integration module
+                // This implements the OpenManus structure with locally hosted models
+                const { generateDirectResponse, ModelType } = await import('./ai/direct-integration');
                 
                 // Map the modelType string to our ModelType enum
                 let directModel: ModelType;
@@ -237,20 +238,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     break;
                 }
                 
-                // Generate text directly without network calls
-                console.log(`Generating response using direct module with model: ${directModel}`);
-                const directResponse = await generateText(
+                // Log full request details for debugging
+                console.log(`[OpenManus] Processing request with model: ${directModel}`);
+                console.log(`[OpenManus] Request content: ${data.message.content.substring(0, 100)}${data.message.content.length > 100 ? '...' : ''}`);
+                console.log(`[OpenManus] Conversation ID: ${data.message.conversationId}`);
+                
+                // Generate text using our bleeding-edge framework
+                // This is completely offline and self-contained
+                const response = await generateDirectResponse(
                   data.message.content,
-                  directModel,
-                  data.message.conversationId
+                  directModel
                 );
                 
-                aiResponseText = directResponse.generated_text;
-              } catch (aiError) {
-                console.error("Error using direct AI generation:", aiError);
+                console.log(`[OpenManus] Generated response of ${response.length} characters`);
                 
-                // Fallback to a basic response
-                aiResponseText = `I received your message: "${data.message.content}". I'm currently running in development mode without full AI model connectivity.`;
+                // Set the response text
+                aiResponseText = response;
+              } catch (aiError) {
+                console.error("[OpenManus] Error generating response:", aiError);
+                
+                // Provide a more detailed error message
+                aiResponseText = `I'm experiencing a technical issue with the OpenManus integration. Error details: ${aiError.message}`;
               }
               
               // Create a response object similar to what the API would return
@@ -292,7 +300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const fallbackResponse = await storage.createMessage({
                   conversationId: data.message.conversationId,
                   role: 'assistant',
-                  content: "I apologize, but I'm currently experiencing some technical difficulties. The AI models are running in limited functionality mode since we're not connected to Ollama. In a production environment, I would provide a complete response to your query.",
+                  content: "I apologize for the technical issue. The OpenManus system is in offline mode with locally hosted models as requested. Please try your query again with more specific instructions for the AI model.",
                   model: modelType,
                   userId: data.message.userId,
                   metadata: { error: "AI generation failed", fallback: true }
