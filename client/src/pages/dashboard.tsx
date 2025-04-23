@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { connectWebSocket, sendChatMessage, registerMessageHandler } from '@/lib/websocket';
+import { AIMessage, WebSocketMessage } from '@/lib/types';
 import { 
   Loader2, 
   Code, 
@@ -76,6 +78,51 @@ export default function Dashboard() {
   const { user, logoutMutation } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
+  const [chatMessages, setChatMessages] = useState<AIMessage[]>([
+    {
+      conversationId: 'default',
+      role: 'assistant',
+      content: 'Hello! I\'m Seren, your advanced AI assistant. I\'m designed to help you with a wide range of tasks including coding, reasoning, problem-solving and more. How can I assist you today?'
+    }
+  ]);
+  const [userInput, setUserInput] = useState('');
+  const [selectedModel, setSelectedModel] = useState<'qwen' | 'olympic' | 'hybrid'>('hybrid');
+  const [isLoadingResponse, setIsLoadingResponse] = useState(false);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const conversationId = useRef<string>('default-' + Date.now());
+  
+  // Handle WebSocket connection for real-time chat
+  useEffect(() => {
+    if (!user) return;
+    
+    // Connect to WebSocket when component mounts
+    const socket = connectWebSocket(user.id);
+    
+    // Register message handler for incoming messages
+    const unregister = registerMessageHandler((data) => {
+      if (data.type === 'new-message' && data.message) {
+        // Add new message to chat
+        setChatMessages(prev => [...prev, data.message]);
+        
+        // If it's an assistant response, we're no longer loading
+        if (data.message.role === 'assistant') {
+          setIsLoadingResponse(false);
+        }
+      }
+    });
+    
+    return () => {
+      // Clean up when component unmounts
+      unregister();
+    };
+  }, [user]);
+  
+  // Scroll to bottom when new messages are added
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
   
   // Get models status
   const { data: modelStatus, isLoading: modelsLoading } = useQuery({
@@ -91,6 +138,66 @@ export default function Dashboard() {
     staleTime: 60000,
     enabled: false, // Temporarily disable this query until API is ready
   });
+  
+  // Get chat history
+  const { data: chatHistory } = useQuery({
+    queryKey: ['/api/messages', conversationId.current],
+    enabled: activeTab === 'chat',
+    onSuccess: (data) => {
+      if (data && Array.isArray(data) && data.length > 0) {
+        setChatMessages(data);
+      }
+    },
+    onError: (error) => {
+      // If there's an error, we'll keep using the existing messages
+      console.error('Failed to fetch chat history:', error);
+    }
+  });
+
+  // Handle sending messages
+  const sendMessage = async () => {
+    if (!userInput.trim() || isLoadingResponse) return;
+    
+    // Create user message
+    const userMessage: AIMessage = {
+      conversationId: conversationId.current,
+      role: 'user',
+      content: userInput,
+      model: selectedModel === 'hybrid' ? 'hybrid' : (selectedModel === 'qwen' ? 'llama3' : 'gemma3')
+    };
+    
+    // Add user message to state
+    setChatMessages(prev => [...prev, userMessage]);
+    
+    // Clear input
+    setUserInput('');
+    
+    // Show loading state
+    setIsLoadingResponse(true);
+    
+    try {
+      // Send through WebSocket for real-time handling
+      const success = sendChatMessage(userMessage);
+      
+      // If WebSocket fails or isn't connected, fall back to REST API
+      if (!success) {
+        const response = await apiRequest('POST', '/api/messages', userMessage);
+        const assistantMessage = await response.json();
+        
+        // Add assistant response to chat
+        setChatMessages(prev => [...prev, assistantMessage]);
+        setIsLoadingResponse(false);
+      }
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      toast({
+        title: 'Failed to send message',
+        description: 'Please try again later.',
+        variant: 'destructive'
+      });
+      setIsLoadingResponse(false);
+    }
+  };
 
   // Handle logout
   const handleLogout = () => {
