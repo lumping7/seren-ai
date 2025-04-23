@@ -1,0 +1,125 @@
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx seRunning in production mode: Using direct HTTP for database connections
+Using PostgreSQL session store
+[PerformanceMonitor] Initialized
+[ErrorHandler] Initialized
+[ResourceManager] Initialized with enhanced profile
+[ResourceManager] System has 63GB RAM and 8 CPU cores
+[ModelIntegration] Initializing model processes...
+Database connection test failed: All attempts to open a WebSocket to connect to the database failed. Please refer to https://github.com/neondatabase/serverless/blob/main/CONFIG.md#websocketconstructor-typeof-websocket--undefined. Details: fetch failed
+[ModelIntegration] Model environment check passed
+[ModelIntegration] Starting qwen2.5-7b-omni process...
+Checking for admin user...
+Error getting user by username admin: Error: All attempts to open a WebSocket to connect to the database failed. Please refer to https://github.com/neondatabase/serverless/blob/main/CONFIG.md#websocketconstructor-typeof-websocket--undefined. Details: fetch failed
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async DatabaseStorage.getUserByUsername (/home/runner/workspace/server/storage.ts:147:24)
+    at async <anonymous> (/home/runner/workspace/server/auth.ts:225:27)
+Creating admin user...
+Error creating user admin: Error: All attempts to open a WebSocket to connect to the database failed. Please refer to https://github.com/neondatabase/serverless/blob/main/CONFIG.md#websocketconstructor-typeof-websocket--undefined. Details: fetch failed
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async DatabaseStorage.createUser (/home/runner/workspace/server/storage.ts:162:24)
+    at async <anonymous> (/home/runner/workspace/server/auth.ts:230:21)
+✅ Created admin user (username: admin, password: admin123)
+Initializing application settings...
+Error getting setting modelConfig: Error: All attempts to open a WebSocket to connect to the database failed. Please refer to https://github.com/neondatabase/serverless/blob/main/CONFIG.md#websocketconstructor-typeof-websocket--undefined. Details: fetch failed
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async DatabaseStorage.getSetting (/home/runner/workspace/server/storage.ts:369:27)
+    at async DatabaseStorage.initializeSettings (/home/runner/workspace/server/storage.ts:101:34)
+    at async <anonymous> (/home/runner/workspace/server/auth.ts:243:7)
+Error getting setting modelConfig: Error: All attempts to open a WebSocket to connect to the database failed. Please refer to https://github.com/neondatabase/serverless/blob/main/CONFIG.md#websocketconstructor-typeof-websocket--undefined. Details: fetch failed
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async DatabaseStorage.getSetting (/home/runner/workspace/server/storage.ts:369:27)
+    at async DatabaseStorage.updateSetting (/home/runner/workspace/server/storage.ts:389:33)
+    at async DatabaseStorage.initializeSettings (/home/runner/workspace/server/storage.ts:103:9)
+    at async <anonymous> (/home/runner/workspace/server/auth.ts:243:7)
+Error updating setting modelConfig: Error: All attempts to open a WebSocket to connect to the database failed. Please refer to https://github.com/neondatabase/serverless/blob/main/CONFIG.md#websocketconstructor-typeof-websocket--undefined. Details: fetch failed
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async DatabaseStorage.updateSetting (/home/runner/workspace/server/storage.ts:405:32)
+    at async DatabaseStorage.initializeSettings (/home/runner/workspace/server/storage.ts:103:9)
+    at async <anonymous> (/home/runner/workspace/server/auth.ts:243:7)
+Error getting setting featureFlags: Error: All attempts to open a WebSocket to connect to the database failed. Please refer to https://github.com/neondatabase/serverless/blob/main/CONFIG.md#websocketconstructor-typeof-websocket--undefined. Details: fetch failed
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async DatabaseStorage.getSetting (/home/runner/workspace/server/storage.ts:369:27)
+    at async DatabaseStorage.initializeSettings (/home/runner/workspace/server/storage.ts:112:35)
+    at async <anonymous> (/home/runner/workspace/server/auth.ts:243:7)
+Error getting setting featureFlags: Error: All attempts to open a WebSocket to connect to the database failed. Please refer to https://github.com/neondatabase/serverless/blob/main/CONFIG.md#websocketconstructor-typeof-websocket--undefined. Details: fetch failed
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async DatabaseStorage.getSetting (/home/runner/workspace/server/storage.ts:369:27)
+    at async DatabaseStorage.updateSetting (/home/runner/workspace/server/storage.ts:389:33)
+    at async DatabaseStorage.initializeSettings (/home/runner/workspace/server/storage.ts:114:9)
+    at async <anonymous> (/home/runner/workspace/server/auth.ts:243:7)
+Error updating setting featureFlags: Error: All attempts to open a WebSocket to connect to the database failed. Please refer to https://github.com/neondatabase/serverless/blob/main/CONFIG.md#websocketconstructor-typeof-websocket--undefined. Details: fetch failed
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async DatabaseStorage.updateSetting (/home/runner/workspace/server/storage.ts:405:32)
+    at async DatabaseStorage.initializeSettings (/home/runner/workspace/server/storage.ts:114:9)
+    at async <anonymous> (/home/runner/workspace/server/auth.ts:243:7)
+Settings initialized successfully
+[qwen2.5-7b-omni] ERROR: 2025-04-23 05:13:02,732 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:11434
+2025-04-23 05:13:02,733 [WARNING] Ollama is not available: HTTPConnectionPool(host='127.0.0.1', port=11434): Max retries exceeded with url: /api/version (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7fe5eb2d5610>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-04-23 05:13:02,734 [INFO] Starting model server for qwen2.5-7b-omni
+2025-04-23 05:13:02,734 [INFO] Using CommunicationSystem
+2025-04-23 05:13:02,734 [INFO] Communication system initialized
+2025-04-23 05:13:02,734 [INFO] Using ReasoningSystem
+2025-04-23 05:13:02,734 [INFO] Reasoning system initialized
+2025-04-23 05:13:02,734 [INFO] Using LiquidNeuralNetwork
+2025-04-23 05:13:02,734 [INFO] Liquid neural network initialized
+2025-04-23 05:13:02,734 [INFO] Using MetacognitiveSystem
+2025-04-23 05:13:02,734 [INFO] Metacognitive system initialized
+2025-04-23 05:13:02,734 [INFO] Using KnowledgeLibrary
+2025-04-23 05:13:02,734 [INFO] Knowledge library initialized
+2025-04-23 05:13:02,734 [INFO] Loading qwen2.5-7b-omni model using Ollama...
+2025-04-23 05:13:02,734 [ERROR] Ollama is not available, but the server will continue with limited functionality
+2025-04-23 05:13:02,734 [INFO] Waiting for messages...
+[qwen2.5-7b-omni] {"id": "02eb2e80-5faf-4e03-8ad5-c1c62bb90639", "type": "status", "model": "qwen2.5-7b-omni", "role": "assistant", "content": {"status": "ready", "model_type": "qwen2.5-7b-omni", "systems_initialized": true, "ollama_available": false, "model_name": "none"}, "timestamp": 1745385182.7348325}
+[ModelIntegration] qwen2.5-7b-omni is ready
+5:13:03 AM [express] serving on port 5000
+[Server] Started with configuration: {
+  pid: 479,
+  memoryRSS: '261 MB',
+  memoryHeapTotal: '96 MB',
+  memoryHeapUsed: '70 MB',
+  cpuCount: 8,
+  nodeVersion: 'v20.18.1',
+  environment: 'development'
+}
+[ModelIntegration] qwen2.5-7b-omni process started successfully
+[ModelIntegration] Starting olympiccoder-7b process...
+[olympiccoder-7b] ERROR: 2025-04-23 05:13:05,408 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:11434
+[olympiccoder-7b] ERROR: 2025-04-23 05:13:05,409 [WARNING] Ollama is not available: HTTPConnectionPool(host='127.0.0.1', port=11434): Max retries exceeded with url: /api/version (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f05013d5610>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[olympiccoder-7b] ERROR: 2025-04-23 05:13:05,409 [INFO] Starting model server for olympiccoder-7b
+[olympiccoder-7b] ERROR: 2025-04-23 05:13:05,409 [INFO] Using CommunicationSystem
+2025-04-23 05:13:05,409 [INFO] Communication system initialized
+2025-04-23 05:13:05,409 [INFO] Using ReasoningSystem
+2025-04-23 05:13:05,409 [INFO] Reasoning system initialized
+2025-04-23 05:13:05,409 [INFO] Using LiquidNeuralNetwork
+2025-04-23 05:13:05,409 [INFO] Liquid neural network initialized
+2025-04-23 05:13:05,409 [INFO] Using MetacognitiveSystem
+2025-04-23 05:13:05,409 [INFO] Metacognitive system initialized
+2025-04-23 05:13:05,409 [INFO] Using KnowledgeLibrary
+2025-04-23 05:13:05,409 [INFO] Knowledge library initialized
+2025-04-23 05:13:05,409 [INFO] Loading olympiccoder-7b model using Ollama...
+2025-04-23 05:13:05,409 [ERROR] Ollama is not available, but the server will continue with limited functionality
+[olympiccoder-7b] ERROR: 2025-04-23 05:13:05,409 [INFO] Waiting for messages...
+[olympiccoder-7b] {"id": "ca60f6c9-429a-4cfe-9360-f3d16a82bdf6", "type": "status", "model": "olympiccoder-7b", "role": "assistant", "content": {"status": "ready", "model_type": "olympiccoder-7b", "systems_initialized": true, "ollama_available": false, "model_name": "none"}, "timestamp": 1745385185.409802}
+[ModelIntegration] olympiccoder-7b is ready
+[ModelIntegration] olympiccoder-7b process started successfully
+[ModelIntegration] Model processes initialized successfully
+[PerformanceMonitor] Operation model_initialization not found
+[AI] Model processes successfully initialized
+[OpenManus] Initializing OpenManus integration
+[AI] OpenManus integration successfully initialized
+[ModelIntegration] qwen2.5-7b-omni heartbeat is stale (24869ms), checking status...
+[ModelIntegration] olympiccoder-7b heartbeat is stale (22784ms), checking status...
+[qwen2.5-7b-omni] {"id": "59fc2a84-1c0c-444e-8bc4-e700d58dafd0", "type": "status", "model": "qwen2.5-7b-omni", "role": "assistant", "content": {"status": "ready", "memory_usage": 0, "uptime": 3.147125244140625e-05}, "timestamp": 1745385208.1949644}
+[ModelIntegration] qwen2.5-7b-omni is ready
+[olympiccoder-7b] {"id": "e6da5779-4e38-44a9-947d-a7da81203d00", "type": "status", "model": "olympiccoder-7b", "role": "assistant", "content": {"status": "ready", "memory_usage": 0, "uptime": 8.58306884765625e-05}, "timestamp": 1745385208.195091}
+[ModelIntegration] olympiccoder-7b is ready
+[ErrorHandler] {

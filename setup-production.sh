@@ -114,6 +114,10 @@ NODE_ENV=production
 SESSION_SECRET=${SESSION_SECRET}
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/seren
 USE_OLLAMA=false
+# OLLAMA_HOST=http://localhost:11434
+# Force HTTP connections for PostgreSQL in VDS environment
+PGHOST=localhost
+PG_USE_DIRECT_HTTP=true
 EOF
 
   log "${GREEN}✓ .env file created${NC}"

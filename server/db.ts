@@ -1,13 +1,13 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import * as schema from "@shared/schema";
+import ws from 'ws';
 
-// PRODUCTION MODE: Disable WebSocket for Neon
-// We're using direct HTTP mode for our production system
-// This prevents the "Cannot set property message of #<ErrorEvent>" error
+// PRODUCTION MODE: Configure for both WebSocket and HTTP
+// For VDS deployment, we need to handle both connection types
 console.log("Running in production mode: Using direct HTTP for database connections");
 neonConfig.useSecureWebSocket = false;
-neonConfig.useSecure = true; // Use HTTPS instead
+neonConfig.webSocketConstructor = ws; // Provide WebSocket implementation
 
 // Handle database configuration
 let pool: Pool;

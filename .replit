@@ -4,7 +4,7 @@ hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["bash", "cargo", "freetype", "glibcLocales", "lcms2", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "ollama", "openjpeg", "openssl", "pkg-config", "rustc", "tcl", "tk", "xsimd", "zlib", "jq"]
+packages = ["bash", "cargo", "freetype", "glibcLocales", "jq", "lcms2", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "ollama", "openjpeg", "openssl", "pkg-config", "rustc", "tcl", "tk", "xsimd", "zlib"]
 
 [deployment]
 deploymentTarget = "autoscale"
