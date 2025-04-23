@@ -134,8 +134,8 @@ Result Integration → Quality Assessment → Output
 
 | Endpoint | Method | Description | Request Body | Response |
 |----------|--------|-------------|--------------|----------|
-| `/api/ai/llama3` | POST | Llama3 model direct access | `{ prompt, options? }` | Generated text with metadata |
-| `/api/ai/gemma3` | POST | Gemma3 model direct access | `{ prompt, options? }` | Generated text with metadata |
+| `/api/ai/qwen` | POST | Qwen model direct access | `{ prompt, options? }` | Generated text with metadata |
+| `/api/ai/olympic` | POST | Olympic model direct access | `{ prompt, options? }` | Generated text with metadata |
 | `/api/ai/hybrid` | POST | Hybrid collaboration engine | `{ prompt, options?, conversationId? }` | Generated text with collaboration metadata |
 | `/api/ai/generate` | POST | Generic model access | `{ prompt, model, options?, enhanceWithKnowledge? }` | Generated text with metadata |
 
@@ -451,7 +451,7 @@ interface ModelConversation {
 }
 
 interface ConversationTurn {
-  model: 'llama3' | 'gemma3';
+  model: 'qwen' | 'olympic';
   content: string;
   timestamp: Date;
   metadata?: {
