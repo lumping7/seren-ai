@@ -650,7 +650,7 @@ Generate complete, working code files that can be directly implemented.
             return result
         except Exception as e:
             logger.error(f"Error generating tests: {e}")
-            return self._generate_tests_unavailable(language or "unknown")
+            return self._generate_error_message(f"tests for {language or 'unknown'}")
         
     def _create_test_prompt(self, code, requirements, options):
         """Create a prompt for test generation"""
@@ -696,7 +696,7 @@ Your tests should be production-ready and include appropriate setup, teardown, a
             return result
         except Exception as e:
             logger.error(f"Error debugging code: {e}")
-            return self._generate_debug_unavailable(language or "unknown")
+            return self._generate_error_message(f"debugging for {language or 'unknown'}")
         
     def _create_debug_prompt(self, code, error, language):
         """Create a prompt for debugging"""
@@ -741,7 +741,7 @@ Provide the complete fixed code and ensure it's production-ready.
             return result
         except Exception as e:
             logger.error(f"Error generating code review: {e}")
-            return self._generate_fallback_review()
+            return self._generate_error_message("code review")
         
     def _create_review_prompt(self, code, tests, requirements, options):
         """Create a prompt for code review"""
@@ -804,7 +804,7 @@ Your review should be thorough and actionable, helping to improve the code quali
             return result
         except Exception as e:
             logger.error(f"Error generating code explanation: {e}")
-            return self._generate_fallback_explanation()
+            return self._generate_error_message("code explanation")
         
     def _create_explanation_prompt(self, code, language, detail_level):
         """Create a prompt for code explanation"""
