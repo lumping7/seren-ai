@@ -786,71 +786,252 @@ export default function Dashboard() {
           
           {/* AI Chat Tab */}
           <TabsContent value="chat" className="space-y-4">
-            <Card className="h-[600px] flex flex-col">
-              <CardHeader>
-                <CardTitle>AI Chat Assistant</CardTitle>
-                <CardDescription>
-                  Interact with the AI system directly
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex-grow overflow-hidden flex flex-col">
-                <ScrollArea className="flex-grow pr-4">
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-full p-2 bg-primary/10">
-                        <Brain className="h-5 w-5 text-primary" />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="md:col-span-3">
+                <Card className="h-[650px] flex flex-col">
+                  <CardHeader className="border-b pb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>AI Chat Assistant</CardTitle>
+                        <CardDescription>
+                          Interact with the Seren AI core through natural language
+                        </CardDescription>
                       </div>
-                      <div className="bg-muted p-3 rounded-lg">
-                        <p className="text-sm">
-                          Hello! I'm Seren, your advanced AI assistant. I combine Qwen2.5-7b-omni and OlympicCoder-7B models 
-                          with neuro-symbolic reasoning. How can I help you today?
-                        </p>
-                      </div>
+                      <Select value={selectedModel} onValueChange={(val) => setSelectedModel(val as any)}>
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Select model" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="qwen">Qwen 2.5 Omni</SelectItem>
+                          <SelectItem value="olympic">Olympic Coder</SelectItem>
+                          <SelectItem value="hybrid">Hybrid (Default)</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    
-                    <div className="flex items-start gap-3 justify-end">
-                      <div className="bg-primary p-3 rounded-lg">
-                        <p className="text-sm text-primary-foreground">
-                          What capabilities do you have?
-                        </p>
+                  </CardHeader>
+                  <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
+                    <ScrollArea className="flex-1 px-4 py-6" ref={chatContainerRef}>
+                      <div className="space-y-6 mb-4">
+                        {chatMessages.map((message, index) => (
+                          <div key={index} className={`flex items-start gap-3 ${message.role === 'user' ? 'justify-end' : ''}`}>
+                            {message.role === 'assistant' && (
+                              <Brain className="h-8 w-8 mt-1 p-1 rounded-md bg-primary text-primary-foreground" />
+                            )}
+                            
+                            <div className={`${message.role === 'user' ? 'bg-primary/10' : 'bg-muted'} p-4 rounded-lg max-w-[85%]`}>
+                              <p className="text-sm whitespace-pre-wrap">
+                                {message.content}
+                              </p>
+                              {message.role === 'assistant' && message.content.includes('```') && (
+                                <div className="mt-2 text-xs text-muted-foreground">
+                                  <Button variant="ghost" size="sm" className="h-6 px-2">
+                                    <Code className="h-3 w-3 mr-1" />
+                                    <span>Copy code</span>
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {message.role === 'user' && (
+                              <div className="h-8 w-8 mt-1 bg-secondary rounded-full flex items-center justify-center">
+                                <span className="text-sm font-medium">{user?.username?.charAt(0).toUpperCase() || 'U'}</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        
+                        {isLoadingResponse && (
+                          <div className="flex items-start gap-3">
+                            <Brain className="h-8 w-8 mt-1 p-1 rounded-md bg-primary text-primary-foreground" />
+                            <div className="bg-muted p-4 rounded-lg">
+                              <div className="flex items-center space-x-2">
+                                <div className="h-2 w-2 rounded-full bg-foreground animate-bounce"></div>
+                                <div className="h-2 w-2 rounded-full bg-foreground animate-bounce delay-75"></div>
+                                <div className="h-2 w-2 rounded-full bg-foreground animate-bounce delay-150"></div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="rounded-full p-2 bg-primary">
-                        <div className="h-5 w-5 text-primary-foreground flex items-center justify-center text-xs font-bold">
-                          U
+                    </ScrollArea>
+                    
+                    <div className="p-4 border-t bg-background">
+                      <div className="flex gap-2">
+                        <Textarea 
+                          placeholder="Type your message..." 
+                          className="flex-1 min-h-[80px]"
+                          value={userInput}
+                          onChange={(e) => setUserInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              sendMessage();
+                            }
+                          }}
+                        />
+                        <div className="flex flex-col gap-2">
+                          <Button 
+                            onClick={sendMessage} 
+                            disabled={isLoadingResponse || !userInput.trim()}
+                          >
+                            {isLoadingResponse ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <ArrowRight className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button variant="outline">
+                            <Code className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center mt-2">
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-8 px-2"
+                            disabled={chatMessages.length <= 1 || isLoadingResponse}
+                          >
+                            <RefreshCw className="h-4 w-4 mr-1" />
+                            <span className="text-xs">Regenerate</span>
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-8 px-2">
+                            <FileText className="h-4 w-4 mr-1" />
+                            <span className="text-xs">Upload File</span>
+                          </Button>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {selectedModel === 'hybrid' ? 'Neuro-symbolic reasoning active' : 
+                           selectedModel === 'qwen' ? 'Using Qwen 2.5 Omni model' : 
+                           'Using Olympic Coder model'}
                         </div>
                       </div>
                     </div>
-                    
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-full p-2 bg-primary/10">
-                        <Brain className="h-5 w-5 text-primary" />
+                  </CardContent>
+                </Card>
+              </div>
+              
+              <div className="md:col-span-1">
+                <Card className="h-[650px] flex flex-col">
+                  <CardHeader className="border-b pb-3">
+                    <CardTitle className="text-sm">Chat Settings</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex-1 overflow-auto p-4">
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-medium">Model Selection</h4>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Primary Model</span>
+                          <Select 
+                            value={selectedModel}
+                            onValueChange={(val) => setSelectedModel(val as any)}
+                          >
+                            <SelectTrigger className="w-[150px]">
+                              <SelectValue placeholder="Select model" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="qwen">Qwen 2.5</SelectItem>
+                              <SelectItem value="olympic">Olympic Coder</SelectItem>
+                              <SelectItem value="hybrid">Hybrid</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
-                      <div className="bg-muted p-3 rounded-lg">
-                        <p className="text-sm">
-                          I have several advanced capabilities:
-                        </p>
-                        <ul className="list-disc text-sm mt-2 space-y-1 pl-4">
-                          <li>Software development with an autonomous agent system</li>
-                          <li>Neuro-symbolic reasoning for enhanced problem-solving</li>
-                          <li>Autonomous code generation, optimization, and testing</li>
-                          <li>Knowledge library access and dynamic learning</li>
-                          <li>Self-improving capabilities through metacognition</li>
-                        </ul>
-                        <p className="text-sm mt-2">
-                          Would you like me to explain any of these capabilities in more detail?
-                        </p>
+                      
+                      <Separator />
+                      
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-medium">Advanced Settings</h4>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Temperature</span>
+                          <div className="w-[120px]">
+                            <Slider
+                              defaultValue={[0.7]}
+                              max={1.0}
+                              step={0.1}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Max Output</span>
+                          <div className="w-[120px]">
+                            <Slider
+                              defaultValue={[2048]}
+                              max={4096}
+                              step={512}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Creativity</span>
+                          <div className="w-[120px]">
+                            <Slider
+                              defaultValue={[0.5]}
+                              max={1.0}
+                              step={0.1}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-medium">Features</h4>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Neuro-Symbolic</span>
+                          <Switch defaultChecked />
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Knowledge Library</span>
+                          <Switch defaultChecked />
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Code Generation</span>
+                          <Switch defaultChecked />
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Reasoning Tracing</span>
+                          <Switch />
+                        </div>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-medium">Conversation</h4>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full"
+                          onClick={() => {
+                            setChatMessages([{
+                              conversationId: 'default',
+                              role: 'assistant',
+                              content: 'Hello! I\'m Seren, your advanced AI assistant. I\'m designed to help you with a wide range of tasks including coding, reasoning, problem-solving and more. How can I assist you today?'
+                            }]);
+                            conversationId.current = 'default-' + Date.now();
+                          }}
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          Clear Conversation
+                        </Button>
+                        <Button variant="outline" size="sm" className="w-full">
+                          <FileText className="h-4 w-4 mr-2" />
+                          Export Chat
+                        </Button>
                       </div>
                     </div>
-                  </div>
-                </ScrollArea>
-              </CardContent>
-              <div className="p-4 border-t">
-                <div className="flex gap-2">
-                  <Input placeholder="Type your message here..." className="flex-grow" />
-                  <Button>Send</Button>
-                </div>
+                  </CardContent>
+                </Card>
               </div>
-            </Card>
+            </div>
           </TabsContent>
           
           {/* Settings Tab */}

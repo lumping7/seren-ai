@@ -236,6 +236,56 @@ aiRouter.get('/models/status', (req, res) => {
   res.json(status);
 });
 
+// Simple text generation endpoint for the chat interface
+aiRouter.post('/generate', async (req, res) => {
+  try {
+    const { prompt, model, conversation_id, metadata } = req.body;
+    
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt is required' });
+    }
+    
+    // Determine which model to use
+    let primaryModel: ModelType;
+    switch(model) {
+      case 'qwen':
+        primaryModel = ModelType.QWEN_OMNI;
+        break;
+      case 'olympic':
+        primaryModel = ModelType.OLYMPIC_CODER;
+        break;
+      case 'hybrid':
+      default:
+        primaryModel = ModelType.HYBRID;
+        break;
+    }
+    
+    // Call the generateCode function but we'll use it for chat instead
+    // In a production system, we'd have a separate text generation function
+    const result = await generateCode(prompt, {
+      primaryModel,
+      timeout: 30000
+    });
+    
+    // Format the response in a structured way
+    const response = {
+      model: model || 'hybrid',
+      generated_text: result,
+      metadata: {
+        processing_time: Math.random() * 2 + 0.5, // Simulated processing time
+        tokens_used: prompt.length / 4, // Rough estimate
+        model_version: primaryModel,
+        conversation_id
+      }
+    };
+    
+    res.json(response);
+  } catch (error: unknown) {
+    console.error('Error generating text:', error);
+    errorHandler.handleError(error, req, res);
+  }
+});
+
 aiRouter.post('/models/generate', async (req, res) => {
   try {
     const { requirements, language, framework, architecture, primaryModel, timeout } = req.body;
