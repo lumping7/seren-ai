@@ -4,7 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useTheme } from '@/components/providers/theme-provider';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { connectWebSocket, sendChatMessage, registerMessageHandler } from '@/lib/websocket';
+import { connectWebSocket, sendChatMessage, registerMessageHandler, closeWebSocket } from '@/lib/websocket';
 import { AIMessage, Project, BackgroundTask } from '@/lib/types';
 
 import { 
@@ -95,49 +95,182 @@ export default function UnifiedInterface() {
   useEffect(() => {
     if (!user) return;
     
-    // Connect to WebSocket when component mounts
-    const socket = connectWebSocket(user.id);
+    let isMounted = true;
+    let ws: WebSocket | null = null;
+    let unregisterFn: (() => void) | null = null;
+    let reconnectTimer: NodeJS.Timeout | null = null;
     
-    // Register message handler for incoming messages
-    const unregister = registerMessageHandler((data) => {
-      if (data.type === 'new-message' && data.message) {
-        // Add new message to chat
-        setChatMessages(prev => [...prev, data.message as AIMessage]);
+    const connectAndSetupWebSocket = () => {
+      try {
+        console.log("Setting up WebSocket connection...");
         
-        // If it's an assistant response, we're no longer loading
-        if (data.message.role === 'assistant') {
-          setIsLoadingResponse(false);
+        // Clear any pending reconnect timers
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
         }
-      } else if (data.type === 'project-update' && data.projectId && data.update) {
-        // Update projects list with new data
-        setProjects(prev => 
-          prev.map(p => p.id === data.projectId ? { ...p, ...data.update } : p)
-        );
         
-        // Show notification of update
-        toast({
-          title: 'Project Update',
-          description: data.update.name && data.update.status ? 
-            `${data.update.name}: ${data.update.status}` : 
-            'Project updated',
-        });
-      } else if (data.type === 'task-complete') {
-        // Remove completed task from background tasks
-        setBackgroundTasks(prev => prev.filter(task => task.id !== data.taskId));
+        // Close any existing WebSocket connection
+        if (ws) {
+          console.log("Closing existing WebSocket connection...");
+          ws.onclose = null; // Prevent triggering reconnect
+          ws.close();
+          ws = null;
+        }
         
-        // Show notification of completion
-        toast({
-          title: 'Task Complete',
-          description: typeof data.message === 'string' ? 
-            data.message : 
-            'A background task has completed successfully.',
+        // Clean up any existing message handler
+        if (unregisterFn) {
+          unregisterFn();
+          unregisterFn = null;
+        }
+        
+        // Connect to WebSocket with user ID
+        try {
+          ws = connectWebSocket(user.id);
+          
+          // Set up event handlers only if ws is not null
+          if (ws) {
+            // Set up error handler
+            const originalOnError = ws.onerror;
+            ws.onerror = (event) => {
+              if (originalOnError && ws) originalOnError.call(ws, event);
+              
+              if (!isMounted) return;
+              
+              console.error("WebSocket connection error", event);
+              toast({
+                title: "Connection Issue", 
+                description: "Lost connection to server. Attempting to reconnect...",
+                variant: "destructive",
+              });
+            };
+            
+            // Set up close handler
+            const originalOnClose = ws.onclose;
+            ws.onclose = (event) => {
+              if (originalOnClose && ws) originalOnClose.call(ws, event);
+              
+              if (!isMounted) return;
+              
+              console.log(`WebSocket closed (${event.code}): ${event.reason || 'No reason given'}`);
+              
+              // Schedule reconnect
+              if (!reconnectTimer && (event.code !== 1000 && event.code !== 1001)) {
+                reconnectTimer = setTimeout(() => {
+                  if (isMounted) {
+                    console.log("Attempting to reconnect WebSocket...");
+                    connectAndSetupWebSocket();
+                  }
+                }, 3000);
+              }
+            };
+          } else {
+            console.warn("Failed to create WebSocket connection");
+          }
+        } catch (wsError) {
+          console.error("Error initializing WebSocket:", wsError);
+        }
+        
+        // Register message handler
+        unregisterFn = registerMessageHandler((data) => {
+          if (!isMounted) return;
+          
+          console.log("WebSocket message received:", data.type);
+          
+          if (data.type === 'new-message' && data.message) {
+            // Add new message to chat
+            setChatMessages(prev => [...prev, data.message as AIMessage]);
+            
+            // If it's an assistant response, we're no longer loading
+            if (data.message.role === 'assistant') {
+              setIsLoadingResponse(false);
+            }
+          } else if (data.type === 'project-update' && data.projectId && data.update) {
+            // Update projects list with new data
+            setProjects(prev => 
+              prev.map(p => p.id === data.projectId ? { ...p, ...data.update } : p)
+            );
+            
+            // Show notification of update
+            toast({
+              title: 'Project Update',
+              description: data.update.name && data.update.status ? 
+                `${data.update.name}: ${data.update.status}` : 
+                'Project updated',
+            });
+          } else if (data.type === 'task-complete') {
+            // Remove completed task from background tasks
+            setBackgroundTasks(prev => prev.filter(task => task.id !== data.taskId));
+            
+            // Show notification of completion
+            toast({
+              title: 'Task Complete',
+              description: typeof data.message === 'string' ? 
+                data.message : 
+                'A background task has completed successfully.',
+            });
+          } else if (data.type === 'error') {
+            // Show error notification
+            toast({
+              title: 'Error',
+              description: data.error || 'An unknown error occurred',
+              variant: 'destructive',
+            });
+          }
         });
+      } catch (error) {
+        console.error("Error setting up WebSocket:", error);
+        
+        if (isMounted) {
+          toast({
+            title: 'Connection Error',
+            description: 'Failed to connect to the server. Will retry...',
+            variant: 'destructive',
+          });
+          
+          // Schedule reconnect
+          if (!reconnectTimer) {
+            reconnectTimer = setTimeout(() => {
+              if (isMounted) {
+                console.log("Attempting to reconnect after error...");
+                connectAndSetupWebSocket();
+              }
+            }, 5000);
+          }
+        }
       }
-    });
+    };
     
+    // Initial connection
+    connectAndSetupWebSocket();
+    
+    // Cleanup function
     return () => {
-      // Clean up when component unmounts
-      unregister();
+      console.log("Cleaning up WebSocket connections...");
+      isMounted = false;
+      
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
+      
+      if (unregisterFn) {
+        unregisterFn();
+      }
+      
+      if (ws) {
+        ws.onclose = null; // Prevent reconnect attempts
+        ws.onerror = null;
+        ws.close();
+      }
+      
+      // Close any existing connection from websocket.ts
+      try {
+        // Import websocket functions
+        const { closeWebSocket } = require('@/lib/websocket');
+        closeWebSocket();
+      } catch (e) {
+        console.error("Error calling closeWebSocket:", e);
+      }
     };
   }, [user, toast]);
   
@@ -237,17 +370,52 @@ export default function UnifiedInterface() {
         return;
       }
       
-      // Send through WebSocket for regular chat messages
-      const success = sendChatMessage(userMessage);
+      // Try to send through WebSocket first
+      let success = false;
+      try {
+        success = sendChatMessage(userMessage);
+        console.log("WebSocket message send attempt result:", success);
+      } catch (wsError) {
+        console.error("WebSocket send error:", wsError);
+        success = false;
+      }
       
       // If WebSocket fails or isn't connected, fall back to REST API
       if (!success) {
-        const response = await apiRequest('POST', '/api/messages', userMessage);
-        const assistantMessage = await response.json();
-        
-        // Add assistant response to chat
-        setChatMessages(prev => [...prev, assistantMessage]);
-        setIsLoadingResponse(false);
+        console.log("Falling back to REST API for message");
+        try {
+          const response = await apiRequest('POST', '/api/messages', userMessage);
+          
+          if (!response.ok) {
+            throw new Error(`API error: ${response.status} ${response.statusText}`);
+          }
+          
+          const assistantMessage = await response.json();
+          
+          // Add assistant response to chat
+          setChatMessages(prev => [...prev, assistantMessage]);
+          setIsLoadingResponse(false);
+        } catch (apiError) {
+          console.error("API fallback error:", apiError);
+          
+          // Create a synthetic message to show error to user
+          const errorMessage: AIMessage = {
+            conversationId: conversationId.current,
+            role: 'assistant',
+            content: "I apologize, but I'm having trouble connecting to the AI models right now. Please try again in a moment.",
+            model: selectedModel,
+            metadata: { error: true, timestamp: new Date().toISOString() }
+          };
+          
+          setChatMessages(prev => [...prev, errorMessage]);
+          setIsLoadingResponse(false);
+          
+          toast({
+            title: 'Connection Issue',
+            description: 'Could not reach the AI service. Please try again later.',
+            variant: 'destructive',
+          });
+        }
       }
     } catch (error) {
       console.error('Failed to send message:', error);
