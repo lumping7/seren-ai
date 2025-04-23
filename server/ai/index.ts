@@ -503,6 +503,28 @@ aiRouter.get('/openmanus/project/:id/files', async (req, res) => {
   }
 });
 
+// Model services map for health monitoring
+export type ModelService = {
+  ready: boolean;
+  lastHeartbeat: number;
+  heartbeatInterval: number;
+};
+
+export const modelServices = new Map<string, ModelService>([
+  ['qwen2.5-7b-omni', { ready: true, lastHeartbeat: Date.now(), heartbeatInterval: 30000 }],
+  ['olympiccoder-7b', { ready: true, lastHeartbeat: Date.now(), heartbeatInterval: 30000 }],
+  ['hybrid', { ready: true, lastHeartbeat: Date.now(), heartbeatInterval: 30000 }]
+]);
+
+// Update model status based on heartbeats
+export function updateModelStatus(model: string, ready: boolean) {
+  const service = modelServices.get(model);
+  if (service) {
+    service.ready = ready;
+    service.lastHeartbeat = Date.now();
+  }
+}
+
 // Initialize model processes when server starts
 (async () => {
   try {

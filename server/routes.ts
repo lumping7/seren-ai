@@ -5,6 +5,9 @@ import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { aiRouter } from "./ai";
 import { securityRouter } from "./security";
+import { healthRouter } from "./health";
+import { isDatabaseAvailable } from "./db";
+import { modelServices } from "./ai";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
@@ -15,6 +18,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Set up security routes
   app.use("/api/security", securityRouter);
+  
+  // Set up health monitoring routes
+  app.use("/api/health", healthRouter);
   
   // AI Memory API
   app.get("/api/memories", async (req, res) => {
