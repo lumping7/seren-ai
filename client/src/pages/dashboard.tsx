@@ -88,6 +88,16 @@ export default function Dashboard() {
     queryKey: ['/api/ai/continuous/project'],
     refetchInterval: selectedProject ? 5000 : false,
   });
+  
+  // Get OpenManus projects
+  const {
+    data: openManusProjects,
+    isLoading: openManusProjectsLoading,
+    refetch: refetchOpenManusProjects
+  } = useQuery({
+    queryKey: ['/api/ai/openmanus/projects'],
+    refetchInterval: selectedProject ? 5000 : false,
+  });
 
   // Get selected project details
   const { 
@@ -117,6 +127,36 @@ export default function Dashboard() {
     onError: (error: any) => {
       toast({
         title: 'Error creating project',
+        description: error.message || 'Failed to create project',
+        variant: 'destructive',
+      });
+    },
+  });
+  
+  // Create new OpenManus project mutation
+  const createOpenManusProjectMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof projectSchema>) => {
+      const response = await apiRequest('POST', '/api/ai/openmanus/project', {
+        name: data.name,
+        description: data.description,
+        language: data.language,
+        framework: data.framework,
+        features: [],
+        constraints: []
+      });
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: 'OpenManus Project created',
+        description: 'Your agentic project has been started with project ID: ' + data.projectId,
+      });
+      refetchOpenManusProjects();
+      projectForm.reset();
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error creating OpenManus project',
         description: error.message || 'Failed to create project',
         variant: 'destructive',
       });

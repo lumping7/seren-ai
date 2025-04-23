@@ -135,9 +135,9 @@ export class OpenManusIntegration {
   private isInitialized: boolean = false;
 
   constructor(
-    modelIntegration: ModelIntegration,
-    errorHandler: ErrorHandler,
-    performanceMonitor: PerformanceMonitor,
+    modelIntegration: ModelIntegrationInterface,
+    errorHandler: ErrorHandlerInterface,
+    performanceMonitor: PerformanceMonitorInterface,
     projectsDir: string = path.join(process.cwd(), 'projects')
   ) {
     this.modelIntegration = modelIntegration;
