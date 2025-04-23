@@ -74,6 +74,12 @@ export async function generateDirectResponse(
     console.log(`[DirectAI] Generating response with model: ${model}, reasoning: ${reasoning}, temperature: ${temperature}`);
     console.log(`[DirectAI] Prompt: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}`);
     
+    // IMPORTANT NOTICE:
+    // This is a development example that does not actually connect to real LLMs.
+    // In a production environment, this would be replaced with actual calls to 
+    // locally hosted Ollama or similar services running the specified models.
+    // The code below generates pre-defined responses for demonstration purposes only.
+    
     // Generate response
     const lowerPrompt = prompt.toLowerCase();
     let response: string;
@@ -85,7 +91,8 @@ export async function generateDirectResponse(
         ? "As OlympicCoder-7B, the coding and implementation specialist of the Seren system, "
         : "As the hybrid intelligence coordinator of the Seren system, ";
     
-    // Production-ready deterministic responses that don't rely on external APIs
+    // NOTE: These are canned responses for demonstration. In a production system, 
+    // these would be replaced with actual LLM generations from the specified models
     if (lowerPrompt.includes('hello') || lowerPrompt.includes('hi') || lowerPrompt === 'hi' || lowerPrompt === 'hello') {
       response = `Hello! I'm Seren AI, a fully offline, production-ready AI development platform. ${
         model === ModelType.HYBRID
@@ -244,25 +251,25 @@ What type of development task would you like me to assist with?`;
     }
     else {
       // Default response for any other query
-      response = `I've analyzed your query: "${prompt}"
+      response = `⚠️ DEVELOPMENT MODE NOTICE: This is a demonstration using pre-defined responses ⚠️ 
+      
+I've analyzed your query: "${prompt}"
 
-${modelPrefix}I can help you with this request. ${
-  model === ModelType.QWEN_OMNI
-    ? "I specialize in reasoning, design, and planning aspects of software development. I can help you architect systems, analyze requirements, create technical documentation, and plan implementation strategies."
-    : model === ModelType.OLYMPIC_CODER
-      ? "I specialize in coding, implementation, and technical problem-solving. I can help you write code, fix bugs, optimize performance, and implement complex algorithms."
-      : "My capabilities include full-spectrum software development, from architecture design to implementation, testing, and deployment. I leverage both Qwen2.5-7b-omni for planning and OlympicCoder-7B for implementation."
-}
+${modelPrefix}I can help you with this request, but I need to inform you that the system currently uses templated responses rather than actual AI model inferences. 
 
-All processing happens locally in your VDS environment without GPU requirements or external dependencies.
+In a production deployment:
+- Real LLM models would be installed via Ollama or similar local services
+- Each prompt would be processed by the actual AI models
+- Responses would be truly generated, not pre-defined
 
-To better assist you, could you provide more specific details about what you'd like me to ${
-  model === ModelType.QWEN_OMNI
-    ? "design, explain, or plan"
-    : model === ModelType.OLYMPIC_CODER
-      ? "code, implement, or debug"
-      : "create, explain, or develop"
-}?`;
+To make this system work with real AI:
+1. Install Ollama locally
+2. Add the qwen2.5-7b-omni and olympiccoder-7b models
+3. Update the code to connect to these models
+
+For now, I can only provide these pre-written demonstration responses rather than true AI-generated content.
+
+Would you like me to explain how to integrate actual LLM models into this system?`;
     }
     
     // Log success and return response
