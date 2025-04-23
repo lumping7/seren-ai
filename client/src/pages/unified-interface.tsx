@@ -852,7 +852,13 @@ export default function UnifiedInterface() {
           
           {/* Chat Input */}
           <div className="p-4 border-t">
-            <div className="flex gap-2">
+            <form 
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                sendMessage();
+              }}
+            >
               <Textarea
                 placeholder="Send a message to Seren AI... (Try 'Create a TODO list app with React')"
                 value={userInput}
@@ -864,11 +870,12 @@ export default function UnifiedInterface() {
                   }
                 }}
                 className="min-h-[60px] flex-1 resize-none"
+                disabled={isLoadingResponse}
               />
               <Button 
+                type="submit"
                 size="icon" 
                 className="h-[60px] w-[60px]" 
-                onClick={sendMessage}
                 disabled={isLoadingResponse || !userInput.trim()}
               >
                 {isLoadingResponse ? (
@@ -877,7 +884,7 @@ export default function UnifiedInterface() {
                   <Send className="h-6 w-6" />
                 )}
               </Button>
-            </div>
+            </form>
             <div className="mt-2 text-xs text-center text-muted-foreground">
               <p>
                 Seren is designed to assist with software development, answer questions, and create projects.
