@@ -172,8 +172,8 @@ export async function startAutonomousProject(req: Request, res: Response) {
     // Assign default team if not specified
     const teamAssignment: Record<DeveloperRole, DevelopmentModel> = {
       [DeveloperRole.ARCHITECT]: teamPreference?.architect || DevelopmentModel.HYBRID,
-      [DeveloperRole.ENGINEER]: teamPreference?.engineer || DevelopmentModel.LLAMA3,
-      [DeveloperRole.TESTER]: teamPreference?.tester || DevelopmentModel.GEMMA3,
+      [DeveloperRole.ENGINEER]: teamPreference?.engineer || DevelopmentModel.QWEN,
+      [DeveloperRole.TESTER]: teamPreference?.tester || DevelopmentModel.OLYMPIC,
       [DeveloperRole.REVIEWER]: teamPreference?.reviewer || DevelopmentModel.HYBRID
     };
     

@@ -1,7 +1,7 @@
 /**
  * AI-to-AI Conversational Framework
  * 
- * Enables human-like conversational interactions between the Llama3 and Gemma3 models
+ * Enables human-like conversational interactions between the Qwen and Olympic models
  * where they can question, challenge, and build upon each other's ideas.
  */
 
@@ -16,7 +16,7 @@ export type ConversationMode = 'debate' | 'collaborative' | 'critical' | 'brains
 
 // Define conversation turn structure
 interface ConversationTurn {
-  model: 'llama3' | 'gemma3';
+  model: 'qwen' | 'olympic';
   content: string;
   timestamp: Date;
   metadata?: {
@@ -58,14 +58,14 @@ export class ConversationManager {
   };
   
   // Define model roles for different conversation modes
-  private modelRoles: Record<'llama3' | 'gemma3', Record<ConversationMode, string[]>> = {
-    'llama3': {
+  private modelRoles: Record<'qwen' | 'olympic', Record<ConversationMode, string[]>> = {
+    'qwen': {
       'debate': ['analytical', 'logical', 'evidence-based'],
       'collaborative': ['systems-oriented', 'architectural', 'implementation-focused'],
       'critical': ['detail-oriented', 'technical', 'performance-focused'],
       'brainstorming': ['innovative', 'technical', 'implementation-focused']
     },
-    'gemma3': {
+    'olympic': {
       'debate': ['holistic', 'human-centered', 'ethical'],
       'collaborative': ['user-focused', 'experiential', 'design-oriented'],
       'critical': ['user-advocate', 'accessibility-focused', 'ethical'],

@@ -79,7 +79,7 @@ const startConversationSchema = z.object({
   topic: z.string().min(1, 'Topic is required'),
   userPrompt: z.string().min(1, 'Prompt is required'),
   mode: z.enum(['debate', 'collaborative', 'critical', 'brainstorming']).optional(),
-  initialModel: z.enum(['llama3', 'gemma3']).optional()
+  initialModel: z.enum(['qwen', 'olympic']).optional()
 });
 
 // Start a new model-to-model conversation
@@ -141,7 +141,7 @@ async function getConversationHandler(req: express.Request, res: express.Respons
 
 // Add a custom turn to an ongoing conversation
 const addTurnSchema = z.object({
-  model: z.enum(['llama3', 'gemma3']),
+  model: z.enum(['qwen', 'olympic']),
   prompt: z.string().min(1, 'Prompt is required')
 });
 
