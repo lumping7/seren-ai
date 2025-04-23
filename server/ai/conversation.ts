@@ -123,9 +123,9 @@ export class ConversationManager {
       console.error('[ConversationManager] Error starting conversation:', error);
       throw errorHandler.createError(
         'Failed to start conversation',
-        ErrorCategory.INTERNAL_ERROR,
-        500,
-        error instanceof Error ? error : undefined
+        ErrorCategory.SYSTEM,
+        error instanceof Error ? error : new Error('Unknown error'),
+        500
       );
     }
   }
@@ -224,7 +224,7 @@ export class ConversationManager {
       }
     } catch (error) {
       console.error('[ConversationManager] Error adding turn:', error);
-      performanceMonitor.endOperation(`conversation_turn_${conversationId}_${conversation.turns.length + 1}`, true);
+      performanceMonitor.endOperation(`conversation_turn_${conversationId}`, true);
     }
   }
   
