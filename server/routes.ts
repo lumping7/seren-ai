@@ -83,6 +83,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // REST API endpoint for chat (fallback when WebSocket is unavailable)
+  app.post("/api/chat", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const { message } = req.body;
+      
+      if (!message || !message.content) {
+        return res.status(400).json({ message: "Invalid message format" });
+      }
+      
+      // Save user message to database
+      const savedMessage = await storage.createMessage({
+        conversationId: message.conversationId,
+        role: 'user',
+        content: message.content,
+        model: message.model || 'hybrid',
+        userId: req.user.id,
+        metadata: message.metadata || {}
+      });
+      
+      // Process via AI (simplified version of WebSocket handler logic)
+      try {
+        // Create fallback response (normally would call AI model)
+        const aiResponse = await storage.createMessage({
+          conversationId: message.conversationId,
+          role: 'assistant',
+          content: `I received your message: "${message.content}". This is a fallback response since we're using the REST API instead of WebSockets.`,
+          model: message.model || 'hybrid',
+          userId: req.user.id,
+          metadata: { 
+            fallback: true,
+            note: "Using REST API fallback instead of WebSockets"
+          }
+        });
+        
+        // Return both messages
+        res.status(200).json({ 
+          userMessage: savedMessage,
+          aiResponse: aiResponse
+        });
+      } catch (aiError) {
+        console.error('AI processing error:', aiError);
+        res.status(500).json({ message: "Error processing message with AI" });
+      }
+    } catch (error) {
+      console.error('Error in chat API:', error);
+      res.status(500).json({ message: "Failed to process chat message" });
+    }
+  });
+  
   // AI Settings API
   app.get("/api/settings/:key", async (req, res) => {
     try {

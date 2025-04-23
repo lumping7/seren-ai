@@ -1,4 +1,5 @@
 import { AIMessage, WebSocketMessage } from "./types";
+import { apiRequest } from "./queryClient";
 
 let socket: WebSocket | null = null;
 let reconnectAttempts = 0;
@@ -6,6 +7,9 @@ const maxReconnectAttempts = 5;
 const reconnectDelay = 2000;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let messageQueue: WebSocketMessage[] = [];
+let isProcessingQueue = false;
+let retryCount = 0;
+const maxRetryCount = 3;
 
 type MessageHandler = (message: WebSocketMessage) => void;
 const messageHandlers: MessageHandler[] = [];

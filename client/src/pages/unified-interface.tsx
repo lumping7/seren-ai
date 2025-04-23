@@ -220,12 +220,32 @@ export default function UnifiedInterface() {
     setIsLoadingResponse(true);
     
     try {
-      // Send via websocket - make sure to use proper message format
-      // WebSocket helper expects an AIMessage, not a WebSocketMessage
-      const success = sendChatMessage(userMessage);
+      // Try WebSocket first
+      let success = false;
       
+      try {
+        // Send via websocket
+        success = sendChatMessage(userMessage);
+        
+        if (!success) {
+          console.log("Message queued for delivery when connection is available");
+        }
+      } catch (wsError) {
+        console.error("WebSocket error:", wsError);
+        // We'll fall back to REST API call
+      }
+      
+      // If WebSocket failed, use REST API as fallback
       if (!success) {
-        console.log("Message queued for delivery when connection is available");
+        try {
+          // Fallback to REST API
+          await apiRequest("POST", "/api/chat", {
+            message: userMessage
+          });
+        } catch (apiError) {
+          console.error("API error:", apiError);
+          throw apiError;
+        }
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -237,7 +257,10 @@ export default function UnifiedInterface() {
         variant: 'default',
       });
       
-      // Don't set isLoadingResponse to false as the message may still be processed
+      // Wait a bit and then stop loading if no response
+      setTimeout(() => {
+        setIsLoadingResponse(false);
+      }, 5000);
     }
   };
   
