@@ -606,27 +606,47 @@ export default function UnifiedInterface() {
     );
   }
   
+  // Function to determine if the viewport is mobile
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  
+  // Set up responsive detection
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    // Initial check
+    checkMobile();
+    
+    // Add event listener for window resize
+    window.addEventListener('resize', checkMobile);
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Header */}
-      <header className="border-b px-4 py-3">
+      <header className="border-b px-2 sm:px-4 py-2 sm:py-3">
         <div className="container mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Brain className="h-8 w-8 text-primary" />
+            <Brain className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
             <div>
-              <h1 className="text-xl font-bold">Seren AI</h1>
-              <p className="text-xs text-muted-foreground">Advanced AI Development System</p>
+              <h1 className="text-lg sm:text-xl font-bold">Seren AI</h1>
+              <p className="text-xs text-muted-foreground hidden sm:block">Advanced AI Development System</p>
             </div>
           </div>
           
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-1 sm:space-x-4">
             {/* Background Tasks Counter */}
             {backgroundTasks.length > 0 && (
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2">
+                  <Button variant="outline" size="sm" className="gap-1 sm:gap-2">
                     <ZapIcon className="h-4 w-4 text-yellow-500" />
-                    <span>{backgroundTasks.length} Active Task{backgroundTasks.length > 1 ? 's' : ''}</span>
+                    <span className="hidden sm:inline">{backgroundTasks.length} Task{backgroundTasks.length > 1 ? 's' : ''}</span>
+                    <span className="sm:hidden">{backgroundTasks.length}</span>
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-80 p-0">
@@ -654,8 +674,8 @@ export default function UnifiedInterface() {
             
             {/* Model Selector */}
             <Select value={selectedModel} onValueChange={handleModelChange}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select Model" />
+              <SelectTrigger className="w-[120px] sm:w-[180px]">
+                <SelectValue placeholder={isMobile ? "Model" : "Select Model"} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="hybrid">Hybrid (Both Models)</SelectItem>
@@ -687,14 +707,18 @@ export default function UnifiedInterface() {
             {/* Projects Button */}
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="outline" size="sm">
-                  Projects
+                <Button variant="outline" size="sm" className={isMobile ? "px-2" : ""}>
+                  {isMobile ? (
+                    <FileText className="h-4 w-4" />
+                  ) : (
+                    <>Projects</>
+                  )}
                   {projects.length > 0 && (
-                    <Badge variant="secondary" className="ml-2">{projects.length}</Badge>
+                    <Badge variant="secondary" className={isMobile ? "ml-1" : "ml-2"}>{projects.length}</Badge>
                   )}
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[400px] sm:w-[540px]">
+              <SheetContent side="right" className="w-[90vw] sm:w-[540px]">
                 <SheetHeader>
                   <SheetTitle>Your Projects</SheetTitle>
                   <SheetDescription>
