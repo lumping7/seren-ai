@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
-import { Loader2, Terminal, Code, Cpu, GitBranch, Play, Pause, RefreshCw } from 'lucide-react';
+import { Loader2, Terminal, Code, Cpu, GitBranch, Play, Pause, RefreshCw, Layers, FileText, Eye } from 'lucide-react';
 
 import {
   Card,
@@ -25,6 +25,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import {
   Form,
   FormControl,
@@ -72,6 +78,7 @@ export default function Dashboard() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('projects');
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [selectedOpenManusProject, setSelectedOpenManusProject] = useState<string | null>(null);
   
   // Get models status
   const { data: modelStatus, isLoading: modelsLoading } = useQuery({
@@ -699,6 +706,18 @@ export default function Dashboard() {
                                 <Badge variant="outline">Tasks: {project.subtask_counts?.total || 0}</Badge>
                                 <Badge variant="outline" className="bg-green-100">Completed: {project.subtask_counts?.completed || 0}</Badge>
                                 <Badge variant="outline" className="bg-yellow-100">In Progress: {project.subtask_counts?.in_progress || 0}</Badge>
+                                <Badge variant="outline" className="bg-red-100">Failed: {project.subtask_counts?.failed || 0}</Badge>
+                              </div>
+                              <div className="mt-2">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="w-full"
+                                  onClick={() => setSelectedOpenManusProject(project.project_id)}
+                                >
+                                  <Layers className="mr-2 h-4 w-4" />
+                                  View Project Details
+                                </Button>
                               </div>
                             </CardContent>
                           </Card>
@@ -722,6 +741,119 @@ export default function Dashboard() {
                     </Button>
                   </CardFooter>
                 </Card>
+                
+                {/* OpenManus Project Details */}
+                {selectedOpenManusProject && (
+                  <Card className="mt-4">
+                    <CardHeader>
+                      <CardTitle>OpenManus Project Details</CardTitle>
+                      <CardDescription>
+                        {openManusProjectDetailsLoading ? 'Loading...' : openManusProjectDetails?.project_name}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {openManusProjectDetailsLoading ? (
+                        <div className="flex items-center justify-center p-8">
+                          <Loader2 className="h-8 w-8 animate-spin text-border" />
+                        </div>
+                      ) : openManusProjectDetails ? (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <h3 className="font-semibold">Status</h3>
+                              <Badge className={getStatusColor(openManusProjectDetails.status)}>
+                                {openManusProjectDetails.status.replace('_', ' ')}
+                              </Badge>
+                            </div>
+                            <div>
+                              <h3 className="font-semibold">Progress</h3>
+                              <div className="flex items-center gap-2">
+                                <Progress value={openManusProjectDetails.progress || 0} className="h-2 flex-1" />
+                                <span className="text-sm">{openManusProjectDetails.progress || 0}%</span>
+                              </div>
+                            </div>
+                            <div>
+                              <h3 className="font-semibold">Tasks</h3>
+                              <div className="flex gap-2">
+                                <Badge variant="outline" className="bg-green-100">
+                                  {openManusProjectDetails.subtask_counts?.completed || 0} completed
+                                </Badge>
+                                <Badge variant="outline" className="bg-yellow-100">
+                                  {openManusProjectDetails.subtask_counts?.in_progress || 0} in progress
+                                </Badge>
+                                <Badge variant="outline" className="bg-red-100">
+                                  {openManusProjectDetails.subtask_counts?.failed || 0} failed
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <h3 className="font-semibold mb-2">Recent Logs</h3>
+                            <div className="bg-muted rounded-md p-4 max-h-60 overflow-y-auto">
+                              <pre className="text-sm">
+                                {openManusProjectDetails.recent_logs?.map((log: any, index: number) => (
+                                  <div key={index} className={`mb-1 ${log.level === 'error' ? 'text-red-500' : ''}`}>
+                                    [{new Date(log.timestamp).toLocaleTimeString()}] {log.message}
+                                  </div>
+                                )).reverse() || 'No logs available'}
+                              </pre>
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <Accordion type="single" collapsible className="w-full">
+                              <AccordionItem value="files">
+                                <AccordionTrigger>
+                                  <div className="flex items-center">
+                                    <FileText className="mr-2 h-4 w-4" />
+                                    Generated Files
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                  <div className="p-2 bg-muted rounded-md">
+                                    {openManusProjectDetails.files ? 
+                                      Object.keys(openManusProjectDetails.files).length > 0 ? (
+                                        <div className="space-y-2">
+                                          {Object.keys(openManusProjectDetails.files).map((filePath, index) => (
+                                            <div key={index} className="flex items-center justify-between">
+                                              <code className="text-sm">{filePath}</code>
+                                              <Button variant="outline" size="sm">
+                                                <Eye className="h-3 w-3 mr-1" />
+                                                View
+                                              </Button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-sm">No files generated yet.</p>
+                                      )
+                                    : <p className="text-sm">No files available.</p>}
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            </Accordion>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center p-4">
+                          <p>No project details available</p>
+                        </div>
+                      )}
+                    </CardContent>
+                    <CardFooter>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => refetchOpenManusProjectDetails()}
+                        className="w-full"
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Refresh Details
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                )}
               </TabsContent>
             </Tabs>
           </div>
