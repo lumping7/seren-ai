@@ -24,6 +24,7 @@ import uuid
 import logging
 import traceback
 import datetime
+import requests
 from typing import Dict, Any, Optional, List, Union
 
 # Configure logging
@@ -34,22 +35,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger("model_server")
 
-# Import conditional dependencies - these may or may not be available
-try:
-    import torch
-    HAS_TORCH = True
-    logger.info("PyTorch is available")
-except ImportError:
-    HAS_TORCH = False
-    logger.warning("PyTorch is not available")
+# Ollama configuration
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+# Set environment flag for using Ollama
+USE_OLLAMA = True
 
+# Check if Ollama is available
 try:
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    HAS_TRANSFORMERS = True
-    logger.info("Transformers is available")
-except ImportError:
-    HAS_TRANSFORMERS = False
-    logger.warning("Transformers is not available")
+    response = requests.get(f"{OLLAMA_HOST}/api/version")
+    if response.status_code == 200:
+        OLLAMA_AVAILABLE = True
+        logger.info(f"Ollama is available: {response.json()}")
+    else:
+        OLLAMA_AVAILABLE = False
+        logger.warning(f"Ollama returned status code {response.status_code}")
+except Exception as e:
+    OLLAMA_AVAILABLE = False
+    logger.warning(f"Ollama is not available: {e}")
+
+# We'll keep these flags for backward compatibility
+HAS_TORCH = False
+HAS_TRANSFORMERS = False
 
 # Define fallback classes and functions
 from enum import Enum
@@ -248,52 +254,54 @@ def init_systems():
         logger.error(traceback.format_exc())
         return False
 
-# Load the AI model
+# Load the AI model with Ollama
 def load_model():
-    """Load the AI model based on environment configuration"""
+    """Load the AI model based on environment configuration using Ollama"""
     model_type = global_state["model_type"]
-    logger.info(f"Loading {model_type} model...")
+    logger.info(f"Loading {model_type} model using Ollama...")
     
     try:
-        # Check if required libraries are available
-        if not HAS_TRANSFORMERS or not HAS_TORCH:
-            logger.error("Required dependencies PyTorch or Transformers not available")
+        # Check if Ollama is available
+        if not OLLAMA_AVAILABLE:
+            logger.error("Ollama is not available, but the server will continue with limited functionality")
             global_state["status"] = "ready"  # Mark as ready but with limited functionality
             return True
         
-        # Model selection based on type
+        # Map the model types to Ollama model names
+        # We'll translate our internal model names to Ollama compatible names
         if "qwen" in model_type.lower():
-            model_id = "Qwen/Qwen-7B"  # Actual model ID for production
+            ollama_model = "qwen2:7b"  # Ollama model name for Qwen 2
         elif "olympic" in model_type.lower() or "coder" in model_type.lower():
-            model_id = "TheBloke/CodeLlama-7B-HF"  # Actual model ID for production
+            ollama_model = "codellama:7b"  # Ollama model name for CodeLlama
         else:
-            model_id = "Qwen/Qwen-7B"  # Default to Qwen
+            ollama_model = "llama3:8b"  # Default to Llama 3 as fallback
             
-        logger.info(f"Using model ID: {model_id}")
+        logger.info(f"Using Ollama model: {ollama_model}")
         
-        # Use the global imports we've already checked for
-        # Don't try to reference transformers classes directly
+        # Check if the model is available in Ollama
+        try:
+            response = requests.get(f"{OLLAMA_HOST}/api/tags")
+            if response.status_code != 200:
+                logger.warning(f"Failed to retrieve models from Ollama: {response.status_code}")
+            else:
+                models = response.json().get("models", [])
+                model_names = [m.get("name") for m in models]
+                logger.info(f"Available Ollama models: {model_names}")
+                
+                if ollama_model not in model_names:
+                    # Model not found, we'll still keep going and let Ollama handle the error
+                    logger.warning(f"Model {ollama_model} not found in Ollama, may need to be pulled")
+        except Exception as e:
+            logger.warning(f"Failed to check Ollama model availability: {e}")
         
-        # Load tokenizer and model - only if both imports succeeded earlier
-        if 'AutoTokenizer' in globals() and 'AutoModelForCausalLM' in globals() and 'torch' in globals():
-            tokenizer = globals()['AutoTokenizer'].from_pretrained(model_id)
-            model = globals()['AutoModelForCausalLM'].from_pretrained(
-                model_id,
-                torch_dtype=globals()['torch'].float16,  # Use float16 for efficiency
-                device_map="auto",  # Automatically use available devices
-                low_cpu_mem_usage=True
-            )
-        else:
-            logger.error("Required transformer classes not found in global scope")
-            raise ImportError("Missing required transformer classes")
+        # Store model reference (actually just the name as we'll call the API)
+        global_state["model"] = ollama_model
+        global_state["tokenizer"] = None  # Not needed with Ollama
         
-        global_state["tokenizer"] = tokenizer
-        global_state["model"] = model
-        
-        logger.info(f"Model {model_type} loaded successfully")
+        logger.info(f"Model {model_type} registered with Ollama successfully")
         return True
     except Exception as e:
-        logger.error(f"Failed to load model {model_type}: {e}")
+        logger.error(f"Failed to setup Ollama model {model_type}: {e}")
         logger.error(traceback.format_exc())
         # We'll still return true so the server can start, but without model capabilities
         global_state["status"] = "ready"  # Mark as ready but with limited functionality
@@ -536,7 +544,7 @@ Format your response as a detailed technical document that a development team ca
             return result
         except Exception as e:
             logger.error(f"Error generating code: {e}")
-            return self._generate_code_unavailable(language or "unknown")
+            return self._generate_error_message(f"code for {language or 'unknown'}")
         
     def _create_code_prompt(self, requirements, architecture, options):
         """Create a prompt for code generation"""
@@ -593,7 +601,7 @@ Generate complete, working code files that can be directly implemented.
             return result
         except Exception as e:
             logger.error(f"Error enhancing code: {e}")
-            return self._generate_code_unavailable(language or "unknown")
+            return self._generate_error_message(f"code enhancement for {language or 'unknown'}")
         
     def _create_enhancement_prompt(self, code, requirements, enhancement, language):
         """Create a prompt for code enhancement"""
@@ -818,70 +826,58 @@ Your review should be thorough and actionable, helping to improve the code quali
     
     # Helper methods for model interaction
     def _generate_text(self, prompt):
-        """Generate text using the loaded model"""
-        # Check if transformers model is available
-        if global_state["model"] and global_state["tokenizer"] and HAS_TRANSFORMERS and HAS_TORCH:
-            logger.info("Generating text using transformers model")
+        """Generate text using the Ollama API"""
+        # Check if Ollama is available and we have a model name
+        if OLLAMA_AVAILABLE and global_state["model"]:
+            model_name = global_state["model"]
+            logger.info(f"Generating text using Ollama model: {model_name}")
             
             try:
-                inputs = global_state["tokenizer"](prompt, return_tensors="pt")
+                # Prepare the request payload for Ollama
+                payload = {
+                    "model": model_name,
+                    "prompt": prompt,
+                    "system": "You are an expert AI assistant for software development tasks. Your responses should be clear, detailed, and production-ready.",
+                    "options": {
+                        "temperature": 0.7,
+                        "top_p": 0.9,
+                        "max_tokens": 2048,
+                        "stop": ["<|endoftext|>", "</response>"]
+                    }
+                }
                 
-                # Generate
-                outputs = global_state["model"].generate(
-                    **inputs,
-                    max_length=1024,
-                    temperature=0.7,
-                    top_p=0.9,
-                    do_sample=True
-                )
+                # Make the API call to Ollama
+                response = requests.post(f"{OLLAMA_HOST}/api/generate", json=payload)
                 
-                # Decode
-                generated_text = global_state["tokenizer"].decode(outputs[0], skip_special_tokens=True)
+                if response.status_code != 200:
+                    logger.error(f"Ollama API error: {response.status_code} - {response.text}")
+                    return {"status": "error", "message": f"Ollama API error: {response.status_code}"}
                 
-                # Extract the generated part (exclude the prompt)
-                generated_text = generated_text[len(prompt):]
+                # Extract the response text
+                result = response.json()
+                generated_text = result.get("response", "")
                 
                 return generated_text.strip()
                 
             except Exception as e:
-                logger.error(f"Error generating with transformers: {e}")
+                logger.error(f"Error generating with Ollama: {e}")
                 logger.error(traceback.format_exc())
                 
                 # Return error message to client
-                raise RuntimeError(f"Model inference failed: {str(e)}")
+                raise RuntimeError(f"Ollama model inference failed: {str(e)}")
         else:
-            # We're missing dependencies but the system is running without models
-            logger.error("Required AI dependencies (PyTorch/Transformers) not available")
+            # We're missing Ollama but the system is running without models
+            logger.error("Ollama is not available or no model was configured")
             
             # Return a status message that will be shown to the client
-            return {"status": "error", "message": "Required AI models or dependencies not available. This is a production system and requires the full AI stack to be installed."}
+            return {"status": "error", "message": "Ollama is not available. This is a production system and requires Ollama to be installed and running."}
     
     def _generate_error_message(self, feature_type):
         """Generate error message when AI models are unavailable"""
         return {
             "status": "error", 
-            "message": f"Cannot generate {feature_type}. AI models are not available. This is a production system and requires PyTorch and Transformers to be installed."
+            "message": f"Cannot generate {feature_type}. Ollama is not available or configured properly. This is a production system and requires Ollama to be running with the appropriate models installed."
         }
-
-    def _generate_code_unavailable(self, language):
-        """Return error when code generation is unavailable"""
-        return self._generate_error_message(f"code for {language}")
-
-    def _generate_tests_unavailable(self, language):
-        """Return error when test generation is unavailable"""
-        return self._generate_error_message(f"tests for {language}")
-    
-    def _generate_debug_unavailable(self, language):
-        """Return error when debug is unavailable"""
-        return self._generate_error_message(f"debugging for {language}")
-    
-    def _generate_fallback_review(self):
-        """Return error when code review is unavailable"""
-        return self._generate_error_message("code review")
-    
-    def _generate_fallback_explanation(self):
-        """Return error when code explanation is unavailable"""
-        return self._generate_error_message("code explanation")
     
     # Helper methods for sending messages
     def send_response(self, message_id, content):
@@ -919,13 +915,8 @@ Your review should be thorough and actionable, helping to improve the code quali
         if message_id is None:
             message_id = str(uuid.uuid4())
             
-        # Update memory usage
-        if HAS_TORCH and torch.cuda.is_available():
-            try:
-                memory_allocated = torch.cuda.memory_allocated() / (1024 ** 3)  # GB
-                global_state["memory_usage"] = memory_allocated
-            except:
-                pass
+        # If using Ollama, we don't need to track memory usage
+        # Ollama manages its own resources
                 
         status = {
             "id": message_id,
@@ -955,9 +946,8 @@ def send_ready_signal():
             "status": "ready",
             "model_type": global_state["model_type"],
             "systems_initialized": True,
-            "transformers_available": HAS_TRANSFORMERS,
-            "torch_available": HAS_TORCH,
-            "cuda_available": HAS_TORCH and torch.cuda.is_available()
+            "ollama_available": OLLAMA_AVAILABLE,
+            "model_name": global_state["model"] if global_state["model"] else "none"
         },
         "timestamp": time.time()
     }
