@@ -198,7 +198,7 @@ class ResourceManager {
           max_pending_requests: 50,
           token_rate_limit: 25000
         },
-        'llama3_inference': {
+        'qwen_inference': {
           max_concurrent_operations: 3,
           memory_usage_percentage: 75,
           cpu_usage_percentage: 75,
@@ -206,7 +206,7 @@ class ResourceManager {
           max_pending_requests: 10,
           token_rate_limit: 10000
         },
-        'gemma3_inference': {
+        'olympic_inference': {
           max_concurrent_operations: 4,
           memory_usage_percentage: 75,
           cpu_usage_percentage: 75,
