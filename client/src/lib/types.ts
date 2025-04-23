@@ -67,4 +67,25 @@ export type WebSocketMessage = {
   type: string;
   message?: AIMessage;
   data?: any;
+  projectId?: string;
+  update?: Record<string, any>;
+  taskId?: string;
+};
+
+export type Project = {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  progress: number;
+  createdAt: string;
+  lastUpdated: string;
+};
+
+export type BackgroundTask = {
+  id: string;
+  type: string;
+  name: string;
+  status: string;
+  startTime: string;
 };

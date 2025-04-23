@@ -7,13 +7,13 @@ import { ThemeProvider } from "@/components/providers/theme-provider";
 import { AuthProvider } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
-import Dashboard from "@/pages/dashboard";
+import UnifiedInterface from "@/pages/unified-interface";
 import { ProtectedRoute } from "@/lib/protected-route";
 
 function Router() {
   return (
     <Switch>
-      <ProtectedRoute path="/" component={Dashboard} />
+      <ProtectedRoute path="/" component={UnifiedInterface} />
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
