@@ -65,29 +65,13 @@ export class DatabaseStorage implements IStorage {
   constructor() {
     this.dbAvailable = isDatabaseAvailable();
     
-    // Initialize session store based on DB availability
-    if (this.dbAvailable) {
-      try {
-        const PostgresSessionStore = connectPg(session);
-        this.sessionStore = new PostgresSessionStore({ 
-          pool,
-          createTableIfMissing: true
-        });
-        console.log("Using PostgreSQL session store");
-      } catch (error) {
-        console.warn("Failed to initialize PostgreSQL session store, falling back to memory store:", error);
-        const MemoryStoreWithSession = MemoryStore(session);
-        this.sessionStore = new MemoryStoreWithSession({
-          checkPeriod: 86400000 // prune expired entries every 24h
-        });
-      }
-    } else {
-      console.warn("Database not available, using in-memory session store");
-      const MemoryStoreWithSession = MemoryStore(session);
-      this.sessionStore = new MemoryStoreWithSession({
-        checkPeriod: 86400000 // prune expired entries every 24h
-      });
-    }
+    // Always use memory store for session data in this version
+    // This avoids WebSocket issues with database connections on VDS
+    console.log("Using in-memory session store for maximum compatibility");
+    const MemoryStoreWithSession = MemoryStore(session);
+    this.sessionStore = new MemoryStoreWithSession({
+      checkPeriod: 86400000 // prune expired entries every 24h
+    });
   }
   
   // Check if we're using the database
