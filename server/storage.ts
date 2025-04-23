@@ -169,7 +169,9 @@ export class DatabaseStorage implements IStorage {
           id,
           ...insertUser,
           createdAt: now,
-          updatedAt: now
+          updatedAt: now,
+          lastLoginAt: null,
+          isAdmin: insertUser.isAdmin || false
         };
         memUsers.set(id, user);
         memUsersByUsername.set(user.username, user);
@@ -188,7 +190,9 @@ export class DatabaseStorage implements IStorage {
         id,
         ...insertUser,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        lastLoginAt: null,
+        isAdmin: insertUser.isAdmin || false
       };
       memUsers.set(id, user);
       memUsersByUsername.set(user.username, user);
@@ -270,10 +274,11 @@ export class DatabaseStorage implements IStorage {
       } else {
         // Create in-memory memory
         const id = Date.now();
+        const timestamp = new Date();
         const newMemory: Memory = {
           id,
           ...memory,
-          createdAt: new Date()
+          timestamp
         };
         memMemories.push(newMemory);
         return newMemory;
@@ -283,10 +288,11 @@ export class DatabaseStorage implements IStorage {
       
       // Fall back to in-memory
       const id = Date.now();
+      const timestamp = new Date();
       const newMemory: Memory = {
         id,
         ...memory,
-        createdAt: new Date()
+        timestamp
       };
       memMemories.push(newMemory);
       return newMemory;
@@ -321,10 +327,11 @@ export class DatabaseStorage implements IStorage {
       } else {
         // Create in-memory message
         const id = Date.now();
+        const timestamp = new Date();
         const newMessage: Message = {
           id,
           ...message,
-          createdAt: new Date()
+          timestamp
         };
         
         // Add to messages map
@@ -339,10 +346,11 @@ export class DatabaseStorage implements IStorage {
       
       // Fall back to in-memory
       const id = Date.now();
+      const timestamp = new Date();
       const newMessage: Message = {
         id,
         ...message,
-        createdAt: new Date()
+        timestamp
       };
       
       // Add to messages map
@@ -426,7 +434,6 @@ export class DatabaseStorage implements IStorage {
             id: Date.now(),
             settingKey: key,
             settingValue: value,
-            createdAt: now,
             updatedAt: now,
             updatedBy: userId
           };
@@ -459,7 +466,6 @@ export class DatabaseStorage implements IStorage {
           id: Date.now(),
           settingKey: key,
           settingValue: value,
-          createdAt: now,
           updatedAt: now,
           updatedBy: userId
         };
