@@ -840,91 +840,12 @@ Your review should be thorough and actionable, helping to improve the code quali
         return self._generate_error_message(f"debugging for {language}")
     
     def _generate_fallback_review(self):
-        """Generate fallback code review"""
-        return """# Code Review
-
-## Overall Assessment
-
-The code appears to be functional but has several areas for improvement in terms of structure, readability, and best practices.
-
-## Issues and Recommendations
-
-### 1. Error Handling
-
-The error handling could be more robust. I recommend:
-
-- Adding try/catch blocks around critical operations
-- Providing more specific error messages
-- Implementing proper error logging
-
-### 2. Code Organization
-
-The code structure could be improved:
-
-- Consider breaking large functions into smaller, more focused ones
-- Group related functionality into classes or modules
-- Follow the single responsibility principle
-
-### 3. Security Considerations
-
-There are potential security issues:
-
-- Ensure all user inputs are properly validated and sanitized
-- Use parameterized queries for database operations to prevent SQL injection
-- Implement proper authentication and authorization checks
-
-### 4. Performance Optimization
-
-Performance could be optimized:
-
-- Consider adding caching for frequently accessed data
-- Optimize database queries by adding indexes where appropriate
-- Use connection pooling for database connections
-
-### 5. Documentation
-
-The code would benefit from better documentation:
-
-- Add comprehensive comments explaining complex logic
-- Include JSDoc/PyDoc for functions and classes
-- Add a README file with setup and usage instructions
-
-This review provides general guidance. For a more detailed review, I would need to examine the specific context and requirements of your application.
-"""
+        """Return error when code review is unavailable"""
+        return self._generate_error_message("code review")
     
     def _generate_fallback_explanation(self):
-        """Generate fallback code explanation"""
-        return """# Code Explanation
-
-## Overview
-
-This code defines a function that performs a specific operation or calculation. Functions encapsulate a set of instructions that can be reused throughout the program.
-
-## Function Structure
-
-The function:
-1. **Takes Parameters**: Accepts input values
-2. **Processes Data**: Manipulates the inputs according to its logic
-3. **Returns Results**: Provides output based on the processing
-
-## Purpose
-
-This function appears to be designed to:
-- Accept input data
-- Validate or transform the data as needed
-- Perform calculations or operations
-- Return the result of these operations
-
-## Key Logic
-
-The function contains:
-- Input validation
-- Core processing logic
-- Error handling (if present)
-- Result formatting
-
-Without more specific context about your application, this is a general explanation of the function's structure and purpose. For a more detailed explanation, I would need additional information about the specific problem this function is intended to solve.
-"""
+        """Return error when code explanation is unavailable"""
+        return self._generate_error_message("code explanation")
     
     # Helper methods for sending messages
     def send_response(self, message_id, content):
