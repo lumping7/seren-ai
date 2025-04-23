@@ -102,8 +102,8 @@ export class DatabaseStorage implements IStorage {
       if (!modelConfigSetting) {
         await this.updateSetting("modelConfig", {
           defaultModel: "hybrid",
-          llama3Enabled: true,
-          gemma3Enabled: true,
+          qwenEnabled: true,
+          olympicEnabled: true,
           temperature: 0.7,
           maxTokens: 1024
         }, userId);

@@ -57,3 +57,24 @@
   }
 }
 
+/* Model badge styling */
+.model-badge {
+  @apply text-xs font-medium px-2 py-0.5 rounded-full;
+}
+
+.model-badge.qwen {
+  @apply bg-blue-100 text-blue-800;
+}
+
+.model-badge.olympic {
+  @apply bg-emerald-100 text-emerald-800;
+}
+
+.model-badge.hybrid {
+  @apply bg-purple-100 text-purple-800;
+}
+
+.model-badge.system {
+  @apply bg-gray-100 text-gray-800;
+}
+
