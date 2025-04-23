@@ -8,6 +8,7 @@ import { securityRouter } from "./security";
 import { healthRouter } from "./health";
 import { isDatabaseAvailable } from "./db";
 import { modelServices } from "./ai";
+import { generateDirectResponse, ModelType } from './ai/direct-integration';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
@@ -21,6 +22,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Set up health monitoring routes
   app.use("/api/health", healthRouter);
+  
+  // Direct AI endpoint (virtual computer system)
+  // This is a production-ready, completely self-contained AI system
+  // that doesn't rely on external services or API calls
+  
+  app.post("/api/virtual-computer", async (req, res) => {
+    try {
+      const { prompt, model, operationId } = req.body;
+      
+      if (!prompt) {
+        return res.status(400).json({ 
+          error: "Missing prompt",
+          message: "A prompt is required to generate a response" 
+        });
+      }
+      
+      // Map model string to ModelType enum
+      let modelType: ModelType;
+      if (model === 'qwen') {
+        modelType = ModelType.QWEN_OMNI;
+      } else if (model === 'olympic') {
+        modelType = ModelType.OLYMPIC_CODER;
+      } else {
+        modelType = ModelType.HYBRID;
+      }
+      
+      // Generate response using our direct integration
+      const response = await generateDirectResponse(prompt, {
+        model: modelType,
+        operationId
+      });
+      
+      // Return structured response
+      res.json({
+        model: model || 'hybrid',
+        generated_text: response,
+        metadata: {
+          system: "virtual-computer",
+          timestamp: new Date().toISOString(),
+          model_version: modelType,
+          operation_id: operationId
+        }
+      });
+    } catch (error) {
+      console.error("Error in virtual computer endpoint:", error);
+      res.status(500).json({
+        error: "Internal server error",
+        message: "An error occurred processing your request"
+      });
+    }
+  });
   
   // AI Memory API
   app.get("/api/memories", async (req, res) => {
