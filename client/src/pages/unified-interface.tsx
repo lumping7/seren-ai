@@ -629,12 +629,14 @@ export default function UnifiedInterface() {
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Header */}
-      <header className="border-b px-2 sm:px-4 py-2 sm:py-3">
-        <div className="container mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Brain className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+      <header className="border-b bg-background/70 backdrop-blur-md supports-[backdrop-filter]:bg-background/50 sticky top-0 z-50">
+        <div className="container mx-auto flex items-center justify-between px-3 sm:px-4 py-3 sm:py-4">
+          <div className="flex items-center space-x-3">
+            <div className="bg-primary/10 p-2 rounded-lg">
+              <Brain className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+            </div>
             <div>
-              <h1 className="text-lg sm:text-xl font-bold">Seren AI</h1>
+              <h1 className="text-lg sm:text-xl font-bold gradient-text">Seren AI</h1>
               <p className="text-xs text-muted-foreground hidden sm:block">Advanced AI Development System</p>
             </div>
           </div>
@@ -675,13 +677,28 @@ export default function UnifiedInterface() {
             
             {/* Model Selector */}
             <Select value={selectedModel} onValueChange={handleModelChange}>
-              <SelectTrigger className="w-[120px] sm:w-[180px]">
+              <SelectTrigger className="w-[120px] sm:w-[180px] focus-ring">
                 <SelectValue placeholder={isMobile ? "Model" : "Select Model"} />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="hybrid">Hybrid (Both Models)</SelectItem>
-                <SelectItem value="qwen">Qwen2.5-7b-omni</SelectItem>
-                <SelectItem value="olympic">OlympicCoder-7B</SelectItem>
+              <SelectContent className="glass">
+                <SelectItem value="hybrid">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-purple-500"></div>
+                    <span>{isMobile ? "Hybrid" : "Hybrid (Both Models)"}</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="qwen">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-blue-500"></div>
+                    <span>{isMobile ? "Qwen" : "Qwen2.5-7b-omni"}</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="olympic">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
+                    <span>{isMobile ? "Olympic" : "OlympicCoder-7B"}</span>
+                  </div>
+                </SelectItem>
               </SelectContent>
             </Select>
             
@@ -689,18 +706,14 @@ export default function UnifiedInterface() {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" onClick={toggleTheme}>
-                    {theme === 'dark' ? (
-                      <Sun className="h-5 w-5" />
-                    ) : theme === 'light' ? (
-                      <Moon className="h-5 w-5" />
-                    ) : (
-                      <Computer className="h-5 w-5" />
-                    )}
+                  <Button variant="outline" size="icon" onClick={toggleTheme} className="focus-ring">
+                    <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                    <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                    <span className="sr-only">Toggle theme</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p>Toggle theme: {theme}</p>
+                <TooltipContent className="glass">
+                  <p>Toggle theme</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -708,20 +721,23 @@ export default function UnifiedInterface() {
             {/* Projects Button */}
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="outline" size="sm" className={isMobile ? "px-2" : ""}>
+                <Button variant="outline" size="sm" className={`${isMobile ? "px-2" : ""} focus-ring`}>
                   {isMobile ? (
                     <FileText className="h-4 w-4" />
                   ) : (
-                    <>Projects</>
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      <span>Projects</span>
+                    </div>
                   )}
                   {projects.length > 0 && (
                     <Badge variant="secondary" className={isMobile ? "ml-1" : "ml-2"}>{projects.length}</Badge>
                   )}
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[90vw] sm:w-[540px]">
+              <SheetContent side="right" className="w-[90vw] sm:w-[540px] glass border-l border-border/50">
                 <SheetHeader>
-                  <SheetTitle>Your Projects</SheetTitle>
+                  <SheetTitle className="text-xl gradient-text">Your Projects</SheetTitle>
                   <SheetDescription>
                     View and manage your AI-generated projects
                   </SheetDescription>
@@ -778,28 +794,41 @@ export default function UnifiedInterface() {
               </SheetContent>
             </Sheet>
             
-            {/* User Info & Logout */}
-            <div className="flex items-center gap-2">
-              <div className="text-right">
-                <p className="text-sm font-medium">{user.username}</p>
-                <Button 
-                  variant="link" 
-                  size="sm" 
-                  className="p-0 h-auto text-xs text-muted-foreground hidden sm:block"
-                  onClick={() => logoutMutation.mutate()}
-                >
-                  Sign out
+            {/* User Menu */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="focus-ring rounded-full h-9 w-9 p-0">
+                  <span className="flex h-full w-full items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-medium">
+                    {user.username?.charAt(0)?.toUpperCase() || 'U'}
+                  </span>
                 </Button>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="sm:hidden h-8 w-8"
-                onClick={() => logoutMutation.mutate()}
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
+              </PopoverTrigger>
+              <PopoverContent className="glass w-56 p-0" align="end">
+                <div className="p-3 border-b">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-medium">
+                      {user.username?.charAt(0)?.toUpperCase() || 'U'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{user.username}</p>
+                      <p className="text-xs text-muted-foreground">Admin User</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="p-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="w-full justify-start gap-2 focus-ring"
+                    onClick={() => logoutMutation.mutate()}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign out
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       </header>
@@ -816,44 +845,75 @@ export default function UnifiedInterface() {
               {chatMessages.map((message, index) => (
                 <div 
                   key={index}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  className={`flex items-end ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
+                  {message.role === 'assistant' && (
+                    <div className="flex h-8 w-8 mr-2 items-center justify-center rounded-full bg-primary/10">
+                      <Brain className="h-4 w-4 text-primary" />
+                    </div>
+                  )}
+                  
                   <div 
-                    className={`max-w-[90%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 ${
+                    className={`max-w-[90%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 shadow-sm ${
                       message.role === 'user' 
                         ? 'bg-primary text-primary-foreground' 
-                        : 'bg-muted'
-                    }`}
+                        : 'glass border border-border/40'
+                    } ${index === chatMessages.length - 1 ? 'fade-in' : ''}`}
                   >
                     {formatMessage(message)}
                     
                     {message.role === 'assistant' && message.model && (
-                      <div className="mt-2 text-xs text-right text-muted-foreground">
-                        {isMobile ? 
-                          (message.model === 'qwen' 
-                            ? 'Qwen' 
+                      <div className="flex items-center justify-end gap-1.5 mt-2">
+                        <div className={`h-2 w-2 rounded-full ${
+                          message.model === 'qwen' 
+                            ? 'bg-blue-500' 
                             : message.model === 'olympic' 
-                              ? 'Olympic' 
-                              : 'Hybrid')
-                          : 
-                          (message.model === 'qwen' 
-                            ? 'Qwen2.5-7b-omni' 
-                            : message.model === 'olympic' 
-                              ? 'OlympicCoder-7B' 
-                              : 'Hybrid')
-                        }
+                              ? 'bg-emerald-500' 
+                              : 'bg-purple-500'
+                        }`} />
+                        <div className="text-xs text-muted-foreground">
+                          {isMobile ? 
+                            (message.model === 'qwen' 
+                              ? 'Qwen' 
+                              : message.model === 'olympic' 
+                                ? 'Olympic' 
+                                : 'Hybrid')
+                            : 
+                            (message.model === 'qwen' 
+                              ? 'Qwen2.5-7b-omni' 
+                              : message.model === 'olympic' 
+                                ? 'OlympicCoder-7B' 
+                                : 'Hybrid')
+                          }
+                        </div>
                       </div>
                     )}
                   </div>
+                  
+                  {message.role === 'user' && (
+                    <div className="flex h-8 w-8 ml-2 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <span className="text-xs font-medium">
+                        {user.username?.charAt(0)?.toUpperCase() || 'U'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               ))}
               
               {isLoadingResponse && (
-                <div className="flex justify-start">
-                  <div className="max-w-[90%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 bg-muted">
+                <div className="flex justify-start items-end">
+                  <div className="flex h-8 w-8 mr-2 items-center justify-center rounded-full bg-primary/10">
+                    <Brain className="h-4 w-4 text-primary" />
+                  </div>
+                  
+                  <div className="max-w-[90%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 glass border border-border/40 fade-in">
                     <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Seren is thinking...</span>
+                      <div className="flex space-x-1">
+                        <div className="h-2 w-2 rounded-full bg-primary animate-pulse"></div>
+                        <div className="h-2 w-2 rounded-full bg-primary animate-pulse delay-150"></div>
+                        <div className="h-2 w-2 rounded-full bg-primary animate-pulse delay-300"></div>
+                      </div>
+                      <span className="text-sm">Seren is thinking...</span>
                     </div>
                   </div>
                 </div>
@@ -892,9 +952,9 @@ export default function UnifiedInterface() {
           )}
           
           {/* Chat Input */}
-          <div className="p-2 sm:p-4 border-t">
+          <div className="p-3 sm:p-4 border-t bg-muted/20">
             <form 
-              className="flex gap-2"
+              className="flex gap-2 relative glass p-1 sm:p-2 rounded-lg overflow-hidden focus-within:ring-1 focus-within:ring-primary/50"
               onSubmit={(e) => {
                 e.preventDefault();
                 sendMessage();
@@ -910,26 +970,29 @@ export default function UnifiedInterface() {
                     sendMessage();
                   }
                 }}
-                className="min-h-[50px] sm:min-h-[60px] flex-1 resize-none text-sm sm:text-base"
+                className="min-h-[50px] sm:min-h-[60px] flex-1 resize-none text-sm sm:text-base border-0 focus-visible:ring-0 bg-transparent px-3 py-2"
                 disabled={isLoadingResponse}
               />
-              <Button 
-                type="submit"
-                size="icon" 
-                className="h-[50px] w-[50px] sm:h-[60px] sm:w-[60px]" 
-                disabled={isLoadingResponse || !userInput.trim()}
-              >
-                {isLoadingResponse ? (
-                  <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin" />
-                ) : (
-                  <Send className="h-5 w-5 sm:h-6 sm:w-6" />
-                )}
-              </Button>
+              <div className="absolute right-2 bottom-2 sm:right-3 sm:bottom-3">
+                <Button 
+                  type="submit"
+                  size="icon" 
+                  variant={userInput.trim() ? "default" : "ghost"}
+                  className="h-9 w-9 rounded-full" 
+                  disabled={isLoadingResponse || !userInput.trim()}
+                >
+                  {isLoadingResponse ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             </form>
-            <div className="mt-2 text-xs text-center text-muted-foreground">
+            <div className="mt-3 text-xs text-center text-muted-foreground">
               <p className="line-clamp-2 sm:line-clamp-none">
-                Seren is designed to assist with software development, answer questions, and create projects.
-                {!isMobile && " Ask me to create software, answer questions, or explain concepts!"}
+                <span className="opacity-80">Seren is designed to assist with software development, answer questions, and create projects.</span>
+                {!isMobile && <span className="opacity-70"> Ask me to create software, answer questions, or explain concepts!</span>}
               </p>
             </div>
           </div>
