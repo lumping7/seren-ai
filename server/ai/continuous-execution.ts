@@ -46,8 +46,8 @@ export enum ExecutionStatus {
 
 // Models available for the development team
 export enum DevelopmentModel {
-  LLAMA3 = 'llama3',
-  GEMMA3 = 'gemma3',
+  QWEN = 'qwen',
+  OLYMPIC = 'olympic',
   HYBRID = 'hybrid'
 }
 
@@ -100,10 +100,10 @@ export const projectInputSchema = z.object({
   description: z.string().min(1, 'Project description is required'),
   requirements: z.string().min(10, 'Detailed requirements are required'),
   teamPreference: z.object({
-    architect: z.enum([DevelopmentModel.LLAMA3, DevelopmentModel.GEMMA3, DevelopmentModel.HYBRID]).optional(),
-    engineer: z.enum([DevelopmentModel.LLAMA3, DevelopmentModel.GEMMA3, DevelopmentModel.HYBRID]).optional(),
-    tester: z.enum([DevelopmentModel.LLAMA3, DevelopmentModel.GEMMA3, DevelopmentModel.HYBRID]).optional(),
-    reviewer: z.enum([DevelopmentModel.LLAMA3, DevelopmentModel.GEMMA3, DevelopmentModel.HYBRID]).optional()
+    architect: z.enum([DevelopmentModel.QWEN, DevelopmentModel.OLYMPIC, DevelopmentModel.HYBRID]).optional(),
+    engineer: z.enum([DevelopmentModel.QWEN, DevelopmentModel.OLYMPIC, DevelopmentModel.HYBRID]).optional(),
+    tester: z.enum([DevelopmentModel.QWEN, DevelopmentModel.OLYMPIC, DevelopmentModel.HYBRID]).optional(),
+    reviewer: z.enum([DevelopmentModel.QWEN, DevelopmentModel.OLYMPIC, DevelopmentModel.HYBRID]).optional()
   }).optional(),
   targetDeadline: z.string().optional(), // ISO date string
   priorityLevel: z.enum(['low', 'medium', 'high', 'critical']).optional().default('medium')
