@@ -64,12 +64,14 @@ export type CodeExecutionResult = {
 };
 
 export type WebSocketMessage = {
-  type: string;
+  type: 'auth' | 'chat-message' | 'new-message' | 'project-update' | 'task-complete' | 'status-update' | 'error';
   message?: AIMessage;
-  data?: any;
+  data?: Record<string, any>;
   projectId?: string;
-  update?: Record<string, any>;
+  update?: Partial<Project>;
   taskId?: string;
+  error?: string;
+  statusCode?: number;
 };
 
 export type Project = {

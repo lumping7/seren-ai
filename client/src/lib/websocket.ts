@@ -9,25 +9,37 @@ type MessageHandler = (message: WebSocketMessage) => void;
 const messageHandlers: MessageHandler[] = [];
 
 export function connectWebSocket(userId?: number): WebSocket {
+  // If socket is already open, return it
   if (socket && socket.readyState === WebSocket.OPEN) {
     return socket;
   }
-
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = `${protocol}//${window.location.host}/ws`;
   
+  // Close existing socket if not already closed
+  if (socket && socket.readyState !== WebSocket.CLOSED) {
+    socket.close();
+  }
+
+  // Determine the correct protocol and URL
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const host = window.location.host;
+  const wsUrl = `${protocol}//${host}/ws`;
+  
+  // Create new socket
   socket = new WebSocket(wsUrl);
   
   socket.onopen = () => {
-    console.log("WebSocket connected");
+    console.log("WebSocket connected successfully");
     reconnectAttempts = 0;
     
     // Send authentication if user is logged in
     if (userId) {
-      sendMessage({
-        type: 'auth',
-        data: { userId }
-      });
+      // Use a small delay to ensure socket is fully ready
+      setTimeout(() => {
+        sendMessage({
+          type: 'auth',
+          data: { userId }
+        });
+      }, 100);
     }
   };
   
@@ -45,6 +57,7 @@ export function connectWebSocket(userId?: number): WebSocket {
   
   socket.onclose = (event) => {
     console.log(`WebSocket closed: ${event.code} ${event.reason}`);
+    socket = null;
     
     // Attempt to reconnect if not a normal closure
     if (event.code !== 1000 && event.code !== 1001) {
@@ -54,6 +67,7 @@ export function connectWebSocket(userId?: number): WebSocket {
   
   socket.onerror = (error) => {
     console.error("WebSocket error:", error);
+    // Don't set socket to null here, let onclose handle it
   };
   
   return socket;
@@ -73,14 +87,56 @@ function tryReconnect() {
   }, reconnectDelay * reconnectAttempts);
 }
 
-export function sendMessage(message: WebSocketMessage) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    console.error("WebSocket is not connected. Cannot send message.");
+export function sendMessage(message: WebSocketMessage): boolean {
+  // Check if socket exists
+  if (!socket) {
+    console.warn("No WebSocket connection exists. Attempting to connect...");
+    socket = connectWebSocket();
+    
+    // Queue message to be sent once connected
+    const queuedMessage = { ...message };
+    setTimeout(() => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        console.log("Sending queued message");
+        socket.send(JSON.stringify(queuedMessage));
+      } else {
+        console.error("Failed to send queued message: WebSocket not ready");
+      }
+    }, 500);
+    
     return false;
   }
   
-  socket.send(JSON.stringify(message));
-  return true;
+  // Check socket state
+  if (socket.readyState === WebSocket.CONNECTING) {
+    console.log("WebSocket is still connecting. Queueing message...");
+    
+    // Queue message to be sent once connected
+    const queuedMessage = { ...message };
+    setTimeout(() => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        console.log("Sending queued message");
+        socket.send(JSON.stringify(queuedMessage));
+      } else {
+        console.error("Failed to send queued message: WebSocket not ready");
+      }
+    }, 500);
+    
+    return false;
+  } else if (socket.readyState !== WebSocket.OPEN) {
+    console.error(`WebSocket is not open (state: ${socket.readyState}). Reconnecting...`);
+    socket = connectWebSocket();
+    return false;
+  }
+  
+  // Socket is ready, send message
+  try {
+    socket.send(JSON.stringify(message));
+    return true;
+  } catch (error) {
+    console.error("Error sending WebSocket message:", error);
+    return false;
+  }
 }
 
 export function sendChatMessage(message: AIMessage) {

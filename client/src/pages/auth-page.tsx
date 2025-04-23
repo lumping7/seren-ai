@@ -192,7 +192,7 @@ function RegisterForm({ onSuccess, onToggle }: { onSuccess: () => void; onToggle
             <FormItem>
               <FormLabel>Display Name</FormLabel>
               <FormControl>
-                <Input placeholder="Your Name" {...field} />
+                <Input placeholder="Your Name" {...field} value={field.value || ''} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -205,7 +205,7 @@ function RegisterForm({ onSuccess, onToggle }: { onSuccess: () => void; onToggle
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input type="email" placeholder="your@email.com" {...field} />
+                <Input type="email" placeholder="your@email.com" {...field} value={field.value || ''} />
               </FormControl>
               <FormMessage />
             </FormItem>
