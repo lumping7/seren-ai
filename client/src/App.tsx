@@ -15,7 +15,7 @@ function Router() {
   return (
     <Switch>
       <ProtectedRoute path="/" component={UnifiedInterface} />
-      <ProtectedRoute path="/virtual-computer" component={VirtualComputerPage} />
+      <Route path="/virtual-computer" component={VirtualComputerPage} />
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
