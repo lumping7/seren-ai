@@ -1,6 +1,7 @@
 import { pgTable, serial, varchar, timestamp, text, integer, boolean, jsonb, primaryKey, real, unique } from 'drizzle-orm/pg-core';
 import { createInsertSchema } from 'drizzle-zod';
 import { z } from 'zod';
+type Json = any;
 
 // Users table
 export const users = pgTable('users', {
@@ -11,7 +12,8 @@ export const users = pgTable('users', {
   displayName: varchar('display_name', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  lastLoginAt: timestamp('last_login_at'),
+  lastLoginAt: timestamp('last_login_at').default(null),
+  isAdmin: boolean('is_admin').default(false),
   preferences: jsonb('preferences').default({})
 });
 
@@ -127,6 +129,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   password: true,
   email: true,
   displayName: true,
+  isAdmin: true,
   preferences: true
 });
 

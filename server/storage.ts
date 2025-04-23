@@ -4,7 +4,8 @@ import { type z } from "zod";
 import { insertMemorySchema, insertMessageSchema, insertSettingSchema } from "@shared/schema";
 import connectPg from "connect-pg-simple";
 import session from "express-session";
-import { db } from "./db";
+import MemoryStore from "memorystore";
+import { db, isDatabaseAvailable } from "./db";
 import { eq, desc, and } from "drizzle-orm";
 import { pool } from "./db";
 import WebSocket from "ws";
@@ -13,6 +14,14 @@ import WebSocket from "ws";
 type InsertMemory = z.infer<typeof insertMemorySchema>;
 type InsertMessage = z.infer<typeof insertMessageSchema>;
 type InsertSetting = z.infer<typeof insertSettingSchema>;
+
+// In-memory fallback data structures
+const memUsers: Map<number, User> = new Map();
+const memUsersByUsername: Map<string, User> = new Map();
+const memMemories: Memory[] = [];
+const memMessages: Map<string, Message[]> = new Map(); // conversationId -> messages
+const memSettings: Map<string, Setting> = new Map();
+let nextUserId = 1;
 
 export interface IStorage {
   // User operations
@@ -34,20 +43,56 @@ export interface IStorage {
   updateSetting(key: string, value: any, userId: number): Promise<Setting>;
   
   // Session store
-  sessionStore: any; // session store interface
+  sessionStore: session.Store;
+  
+  // Status
+  isUsingDatabase(): boolean;
 }
 
-export class DatabaseStorage implements IStorage {
-  sessionStore: any; // session store interface
+// Helper class for error handling
+class StorageError extends Error {
+  constructor(message: string, public operation: string, public originalError?: any) {
+    super(message);
+    this.name = 'StorageError';
+  }
+}
 
+// Resilient storage implementation
+export class DatabaseStorage implements IStorage {
+  sessionStore: session.Store;
+  private dbAvailable: boolean;
+  
   constructor() {
-    const PostgresSessionStore = connectPg(session);
-    this.sessionStore = new PostgresSessionStore({ 
-      pool,
-      createTableIfMissing: true
-    });
+    this.dbAvailable = isDatabaseAvailable();
     
-    // We'll initialize settings after we confirm a user exists in auth.ts
+    // Initialize session store based on DB availability
+    if (this.dbAvailable) {
+      try {
+        const PostgresSessionStore = connectPg(session);
+        this.sessionStore = new PostgresSessionStore({ 
+          pool,
+          createTableIfMissing: true
+        });
+        console.log("Using PostgreSQL session store");
+      } catch (error) {
+        console.warn("Failed to initialize PostgreSQL session store, falling back to memory store:", error);
+        const MemoryStoreWithSession = MemoryStore(session);
+        this.sessionStore = new MemoryStoreWithSession({
+          checkPeriod: 86400000 // prune expired entries every 24h
+        });
+      }
+    } else {
+      console.warn("Database not available, using in-memory session store");
+      const MemoryStoreWithSession = MemoryStore(session);
+      this.sessionStore = new MemoryStoreWithSession({
+        checkPeriod: 86400000 // prune expired entries every 24h
+      });
+    }
+  }
+  
+  // Check if we're using the database
+  isUsingDatabase(): boolean {
+    return this.dbAvailable;
   }
   
   // Method to initialize settings with a valid user ID
@@ -80,102 +125,351 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // User operations
   async getUser(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    try {
+      if (this.dbAvailable) {
+        const [user] = await db.select().from(users).where(eq(users.id, id));
+        return user;
+      } else {
+        return memUsers.get(id);
+      }
+    } catch (error) {
+      console.error(`Error getting user ${id}:`, error);
+      // Fall back to in-memory
+      return memUsers.get(id);
+    }
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
+    try {
+      if (this.dbAvailable) {
+        const [user] = await db.select().from(users).where(eq(users.username, username));
+        return user;
+      } else {
+        return memUsersByUsername.get(username);
+      }
+    } catch (error) {
+      console.error(`Error getting user by username ${username}:`, error);
+      // Fall back to in-memory
+      return memUsersByUsername.get(username);
+    }
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
-    return user;
+    try {
+      if (this.dbAvailable) {
+        const [user] = await db.insert(users).values(insertUser).returning();
+        return user;
+      } else {
+        // In-memory user creation
+        const id = nextUserId++;
+        const now = new Date();
+        const user: User = {
+          id,
+          ...insertUser,
+          createdAt: now,
+          updatedAt: now
+        };
+        memUsers.set(id, user);
+        memUsersByUsername.set(user.username, user);
+        return user;
+      }
+    } catch (error) {
+      console.error(`Error creating user ${insertUser.username}:`, error);
+      if (!this.dbAvailable) {
+        throw new StorageError('Failed to create user', 'createUser', error);
+      }
+      
+      // Fall back to in-memory if DB fails
+      const id = nextUserId++;
+      const now = new Date();
+      const user: User = {
+        id,
+        ...insertUser,
+        createdAt: now,
+        updatedAt: now
+      };
+      memUsers.set(id, user);
+      memUsersByUsername.set(user.username, user);
+      return user;
+    }
   }
   
+  // Memory operations
   async getMemories(limit?: number): Promise<Memory[]> {
-    // Create base query
-    const baseQuery = db.select().from(aiMemories).orderBy(desc(aiMemories.timestamp));
-    
-    // Execute with or without limit
-    if (limit) {
-      return await baseQuery.limit(limit);
-    } else {
-      return await baseQuery;
+    try {
+      if (this.dbAvailable) {
+        // Create base query
+        const baseQuery = db.select().from(aiMemories).orderBy(desc(aiMemories.timestamp));
+        
+        // Execute with or without limit
+        if (limit) {
+          return await baseQuery.limit(limit);
+        } else {
+          return await baseQuery;
+        }
+      } else {
+        // Return in-memory memories, sorted by timestamp descending
+        const sorted = [...memMemories].sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        return limit ? sorted.slice(0, limit) : sorted;
+      }
+    } catch (error) {
+      console.error(`Error getting memories:`, error);
+      
+      // Fall back to in-memory
+      const sorted = [...memMemories].sort((a, b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      return limit ? sorted.slice(0, limit) : sorted;
     }
   }
   
   async getMemoriesByUser(userId: number, limit?: number): Promise<Memory[]> {
-    // Create base query with user filter
-    const baseQuery = db.select()
-      .from(aiMemories)
-      .where(eq(aiMemories.userId, userId))
-      .orderBy(desc(aiMemories.timestamp));
-    
-    // Execute with or without limit
-    if (limit) {
-      return await baseQuery.limit(limit);
-    } else {
-      return await baseQuery;
+    try {
+      if (this.dbAvailable) {
+        // Create base query with user filter
+        const baseQuery = db.select()
+          .from(aiMemories)
+          .where(eq(aiMemories.userId, userId))
+          .orderBy(desc(aiMemories.timestamp));
+        
+        // Execute with or without limit
+        if (limit) {
+          return await baseQuery.limit(limit);
+        } else {
+          return await baseQuery;
+        }
+      } else {
+        // Filter in-memory memories by userId, sorted by timestamp descending
+        const filtered = memMemories
+          .filter(m => m.userId === userId)
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        
+        return limit ? filtered.slice(0, limit) : filtered;
+      }
+    } catch (error) {
+      console.error(`Error getting memories for user ${userId}:`, error);
+      
+      // Fall back to in-memory
+      const filtered = memMemories
+        .filter(m => m.userId === userId)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      
+      return limit ? filtered.slice(0, limit) : filtered;
     }
   }
   
   async createMemory(memory: InsertMemory): Promise<Memory> {
-    const [newMemory] = await db.insert(aiMemories).values(memory).returning();
-    return newMemory;
+    try {
+      if (this.dbAvailable) {
+        const [newMemory] = await db.insert(aiMemories).values(memory).returning();
+        return newMemory;
+      } else {
+        // Create in-memory memory
+        const id = Date.now();
+        const newMemory: Memory = {
+          id,
+          ...memory,
+          createdAt: new Date()
+        };
+        memMemories.push(newMemory);
+        return newMemory;
+      }
+    } catch (error) {
+      console.error(`Error creating memory:`, error);
+      
+      // Fall back to in-memory
+      const id = Date.now();
+      const newMemory: Memory = {
+        id,
+        ...memory,
+        createdAt: new Date()
+      };
+      memMemories.push(newMemory);
+      return newMemory;
+    }
   }
   
+  // Message operations
   async getMessages(conversationId: string): Promise<Message[]> {
-    return await db.select()
-      .from(aiMessages)
-      .where(eq(aiMessages.conversationId, conversationId))
-      .orderBy(aiMessages.timestamp);
+    try {
+      if (this.dbAvailable) {
+        return await db.select()
+          .from(aiMessages)
+          .where(eq(aiMessages.conversationId, conversationId))
+          .orderBy(aiMessages.timestamp);
+      } else {
+        // Get in-memory messages for conversation
+        return memMessages.get(conversationId) || [];
+      }
+    } catch (error) {
+      console.error(`Error getting messages for conversation ${conversationId}:`, error);
+      
+      // Fall back to in-memory
+      return memMessages.get(conversationId) || [];
+    }
   }
   
   async createMessage(message: InsertMessage): Promise<Message> {
-    const [newMessage] = await db.insert(aiMessages).values(message).returning();
-    return newMessage;
+    try {
+      if (this.dbAvailable) {
+        const [newMessage] = await db.insert(aiMessages).values(message).returning();
+        return newMessage;
+      } else {
+        // Create in-memory message
+        const id = Date.now();
+        const newMessage: Message = {
+          id,
+          ...message,
+          createdAt: new Date()
+        };
+        
+        // Add to messages map
+        const conversationMessages = memMessages.get(message.conversationId) || [];
+        conversationMessages.push(newMessage);
+        memMessages.set(message.conversationId, conversationMessages);
+        
+        return newMessage;
+      }
+    } catch (error) {
+      console.error(`Error creating message:`, error);
+      
+      // Fall back to in-memory
+      const id = Date.now();
+      const newMessage: Message = {
+        id,
+        ...message,
+        createdAt: new Date()
+      };
+      
+      // Add to messages map
+      const conversationMessages = memMessages.get(message.conversationId) || [];
+      conversationMessages.push(newMessage);
+      memMessages.set(message.conversationId, conversationMessages);
+      
+      return newMessage;
+    }
   }
   
+  // Settings operations
   async getSetting(key: string): Promise<Setting | undefined> {
-    const [setting] = await db.select()
-      .from(aiSettings)
-      .where(eq(aiSettings.settingKey, key));
-    
-    return setting;
+    try {
+      if (this.dbAvailable) {
+        const [setting] = await db.select()
+          .from(aiSettings)
+          .where(eq(aiSettings.settingKey, key));
+        
+        return setting;
+      } else {
+        return memSettings.get(key);
+      }
+    } catch (error) {
+      console.error(`Error getting setting ${key}:`, error);
+      
+      // Fall back to in-memory
+      return memSettings.get(key);
+    }
   }
   
   async updateSetting(key: string, value: any, userId: number): Promise<Setting> {
-    // Check if setting exists
-    const existingSetting = await this.getSetting(key);
-    
-    if (existingSetting) {
-      // Update existing setting
-      const [updatedSetting] = await db.update(aiSettings)
-        .set({ 
-          settingValue: value,
-          updatedAt: new Date(),
-          updatedBy: userId
-        })
-        .where(eq(aiSettings.settingKey, key))
-        .returning();
+    try {
+      if (this.dbAvailable) {
+        // Check if setting exists
+        const existingSetting = await this.getSetting(key);
+        
+        if (existingSetting) {
+          // Update existing setting
+          const [updatedSetting] = await db.update(aiSettings)
+            .set({ 
+              settingValue: value,
+              updatedAt: new Date(),
+              updatedBy: userId
+            })
+            .where(eq(aiSettings.settingKey, key))
+            .returning();
+          
+          return updatedSetting;
+        } else {
+          // Create new setting
+          const [newSetting] = await db.insert(aiSettings)
+            .values({
+              settingKey: key,
+              settingValue: value,
+              updatedBy: userId
+            })
+            .returning();
+          
+          return newSetting;
+        }
+      } else {
+        // Check if setting exists in memory
+        const existingSetting = memSettings.get(key);
+        const now = new Date();
+        
+        if (existingSetting) {
+          // Update existing setting
+          const updatedSetting: Setting = {
+            ...existingSetting,
+            settingValue: value,
+            updatedAt: now,
+            updatedBy: userId
+          };
+          
+          memSettings.set(key, updatedSetting);
+          return updatedSetting;
+        } else {
+          // Create new setting
+          const newSetting: Setting = {
+            id: Date.now(),
+            settingKey: key,
+            settingValue: value,
+            createdAt: now,
+            updatedAt: now,
+            updatedBy: userId
+          };
+          
+          memSettings.set(key, newSetting);
+          return newSetting;
+        }
+      }
+    } catch (error) {
+      console.error(`Error updating setting ${key}:`, error);
       
-      return updatedSetting;
-    } else {
-      // Create new setting
-      const [newSetting] = await db.insert(aiSettings)
-        .values({
+      // Fall back to in-memory
+      const existingSetting = memSettings.get(key);
+      const now = new Date();
+      
+      if (existingSetting) {
+        // Update existing setting
+        const updatedSetting: Setting = {
+          ...existingSetting,
+          settingValue: value,
+          updatedAt: now,
+          updatedBy: userId
+        };
+        
+        memSettings.set(key, updatedSetting);
+        return updatedSetting;
+      } else {
+        // Create new setting
+        const newSetting: Setting = {
+          id: Date.now(),
           settingKey: key,
           settingValue: value,
+          createdAt: now,
+          updatedAt: now,
           updatedBy: userId
-        })
-        .returning();
-      
-      return newSetting;
+        };
+        
+        memSettings.set(key, newSetting);
+        return newSetting;
+      }
     }
   }
 }
 
+// Export storage instance
 export const storage = new DatabaseStorage();

@@ -27,18 +27,94 @@ logger = logging.getLogger("agent_system")
 
 # Import conditional dependencies
 try:
-    # Try to import from ai_core modules
-    from model_server import ModelType, MessageType
-    from neurosymbolic_reasoning import ReasoningSystem, ReasoningStrategy
-    from liquid_neural_network import LiquidNeuralNetwork
-    from metacognition import MetacognitiveSystem
-    from knowledge_library import KnowledgeLibrary
+    # First check if Ollama is available
+    import requests
+    OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+    try:
+        response = requests.get(f"{OLLAMA_HOST}/api/version")
+        if response.status_code == 200:
+            OLLAMA_AVAILABLE = True
+            logger.info(f"Ollama is available: {response.json()}")
+        else:
+            OLLAMA_AVAILABLE = False
+            logger.warning(f"Ollama returned status code {response.status_code}")
+    except Exception as e:
+        OLLAMA_AVAILABLE = False
+        logger.warning(f"Ollama is not available: {e}")
+    
+    # Try to import from ai_core modules with correct paths
+    from ai_core.model_server import ModelType, MessageType
+    from ai_core.neurosymbolic_reasoning import ReasoningSystem, ReasoningStrategy
+    from ai_core.liquid_neural_network import LiquidNeuralNetwork
+    from ai_core.metacognition import MetacognitiveSystem
+    from ai_core.knowledge_library import KnowledgeLibrary
     
     HAS_CORE_MODULES = True
     logger.info("Successfully imported core AI modules")
 except ImportError as e:
     logger.warning(f"Could not import some core modules: {e}")
     HAS_CORE_MODULES = False
+    
+    # Define minimal replacement classes
+    class ModelType:
+        """Minimal model type enum"""
+        QWEN_OMNI = "qwen2.5-7b-omni"
+        OLYMPIC_CODER = "olympiccoder-7b"
+        HYBRID = "hybrid"
+    
+    class MessageType:
+        """Minimal message type enum"""
+        INFO = "info"
+        ERROR = "error"
+        REQUEST = "request"
+        RESPONSE = "response"
+    
+    class ReasoningSystem:
+        """Minimal reasoning system"""
+        def __init__(self):
+            logger.info("Using ReasoningSystem")
+        
+        def reason(self, query, context=None):
+            return {"result": "Reasoning not available", "confidence": 0.0}
+    
+    class ReasoningStrategy:
+        """Minimal reasoning strategy enum"""
+        DEDUCTIVE = "deductive"
+        INDUCTIVE = "inductive"
+        ABDUCTIVE = "abductive"
+        ANALOGICAL = "analogical"
+        CAUSAL = "causal"
+    
+    class LiquidNeuralNetwork:
+        """Minimal liquid neural network"""
+        def __init__(self):
+            logger.info("Using LiquidNeuralNetwork")
+        
+        def process(self, input_data):
+            return {"result": input_data, "confidence": 0.5}
+    
+    class MetacognitiveSystem:
+        """Minimal metacognitive system"""
+        def __init__(self):
+            logger.info("Using MetacognitiveSystem")
+        
+        def reflect(self, task, result):
+            return {"evaluation": "No reflection available", "confidence": 0.0}
+    
+    class KnowledgeLibrary:
+        """Minimal knowledge library"""
+        def __init__(self):
+            logger.info("Using KnowledgeLibrary")
+            self.knowledge = {}
+        
+        def get_knowledge(self, domain, query):
+            return []
+        
+        def add_knowledge(self, domain, key, value):
+            if domain not in self.knowledge:
+                self.knowledge[domain] = {}
+            self.knowledge[domain][key] = value
+            return True
 
 # =============================================================================
 # Agent System Components

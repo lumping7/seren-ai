@@ -22,14 +22,104 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
-# Import required libraries
+# Import numpy for vector operations
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
-# Local imports
-from ai_core.knowledge.library import knowledge_library
+# Check if Ollama is available
+OLLAMA_AVAILABLE = False
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+
+try:
+    import requests
+    response = requests.get(f"{OLLAMA_HOST}/api/version")
+    if response.status_code == 200:
+        OLLAMA_AVAILABLE = True
+        logging.info(f"Ollama is available: {response.json()}")
+    else:
+        logging.warning(f"Ollama returned status code {response.status_code}")
+except Exception as e:
+    logging.warning(f"Ollama is not available: {e}")
+
+# PyTorch is no longer a hard dependency
+HAS_TORCH = False
+try:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    HAS_TORCH = True
+    logging.info("PyTorch is available and will be used for advanced neural operations")
+except ImportError:
+    logging.info("PyTorch is not available, using Ollama or NumPy for neural operations")
+    # Create minimal compatibility layer for torch operations
+    class TorchCompat:
+        def zeros(self, *args, **kwargs):
+            return np.zeros(*args)
+            
+        def zeros_like(self, x):
+            return np.zeros_like(x)
+            
+        def tensor(self, data, dtype=None):
+            return np.array(data, dtype=np.float32 if dtype is None else dtype)
+            
+        def stack(self, tensors, dim=0):
+            return np.stack(tensors, axis=dim)
+            
+        def cat(self, tensors, dim=1):
+            return np.concatenate(tensors, axis=dim)
+            
+        def sigmoid(self, x):
+            return 1 / (1 + np.exp(-x))
+            
+        def mean(self, x):
+            return np.mean(x)
+            
+        def exp(self, x):
+            return np.exp(x)
+            
+        def no_grad(self):
+            class NoGradContext:
+                def __enter__(self):
+                    pass
+                def __exit__(self, *args):
+                    pass
+            return NoGradContext()
+            
+    # Create minimal class for nn.Parameter
+    class Parameter:
+        def __init__(self, data):
+            self.data = data
+            
+    # Minimal nn module
+    class NNCompat:
+        def __init__(self):
+            self.Parameter = Parameter
+            
+    # If torch is not available, use compatibility layer
+    if not HAS_TORCH:
+        torch = TorchCompat()
+        nn = NNCompat()
+        
+# Try to import the knowledge library
+try:
+    from ai_core.knowledge.library import knowledge_library
+    HAS_KNOWLEDGE_LIBRARY = True
+except ImportError:
+    logging.warning("Knowledge library not available, some reasoning features will be limited")
+    HAS_KNOWLEDGE_LIBRARY = False
+    # Create minimal knowledge library interface
+    class MinimalKnowledgeLibrary:
+        def __init__(self):
+            self.facts = {}
+            self.rules = {}
+            
+        def get_facts(self, domain=None):
+            return []
+            
+        def get_rules(self, domain=None):
+            return []
+            
+    # Create minimal instance if import fails
+    knowledge_library = MinimalKnowledgeLibrary()
 
 # Configure logging
 logging.basicConfig(
