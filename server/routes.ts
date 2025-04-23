@@ -215,17 +215,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Determine which AI model to use
               const modelType = data.message.model || 'hybrid';
               
-              // Get AI response through the AI router
-              const aiResponse = await fetch('http://localhost/api/ai/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  prompt: data.message.content,
-                  model: modelType,
-                  conversation_id: data.message.conversationId,
-                  metadata: data.message.metadata
-                })
-              }).then(res => res.json());
+              // Direct AI generation using our local AI router
+              let aiResponseText = '';
+              
+              try {
+                // Import the direct generation module
+                const { generateText, ModelType } = await import('./ai/direct-generation');
+                
+                // Map the modelType string to our ModelType enum
+                let directModel: ModelType;
+                switch (modelType) {
+                  case 'qwen':
+                    directModel = ModelType.QWEN_OMNI;
+                    break;
+                  case 'olympic':
+                    directModel = ModelType.OLYMPIC_CODER;
+                    break;
+                  case 'hybrid':
+                  default:
+                    directModel = ModelType.HYBRID;
+                    break;
+                }
+                
+                // Generate text directly without network calls
+                console.log(`Generating response using direct module with model: ${directModel}`);
+                const directResponse = await generateText(
+                  data.message.content,
+                  directModel,
+                  data.message.conversationId
+                );
+                
+                aiResponseText = directResponse.generated_text;
+              } catch (aiError) {
+                console.error("Error using direct AI generation:", aiError);
+                
+                // Fallback to a basic response
+                aiResponseText = `I received your message: "${data.message.content}". I'm currently running in development mode without full AI model connectivity.`;
+              }
+              
+              // Create a response object similar to what the API would return
+              const aiResponse = {
+                generated_text: aiResponseText,
+                metadata: {
+                  model_version: modelType,
+                  processing_time: 0,
+                  tokens_used: 0
+                }
+              };
               
               // If AI response was successful, save it and broadcast it
               if (aiResponse && aiResponse.generated_text) {
