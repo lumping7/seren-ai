@@ -221,6 +221,10 @@ import {
   updateProjectExecution, 
   registerContinuousExecutionRoutes 
 } from './continuous-execution';
+import { OpenManusIntegration } from './openmanus-integration';
+import { ModelIntegration } from './model-integration';
+import { ErrorHandler } from './error-handler';
+import { PerformanceMonitor } from './performance-monitor';
 
 // Model integration endpoints
 aiRouter.get('/models/status', (req, res) => {
@@ -326,11 +330,103 @@ aiRouter.post('/continuous/project/:id/action', updateProjectExecution);
 // Register additional continuous execution routes
 registerContinuousExecutionRoutes(aiRouter);
 
+// Create OpenManus integration instance
+const openManusIntegration = new OpenManusIntegration(
+  {
+    executeTask: async (params) => {
+      // This wraps our existing model integration functions
+      const { model, role, content, context } = params;
+      
+      if (model === 'qwen2.5-7b-omni') {
+        return await generateCode(content, { primaryModel: 'qwen' });
+      } else if (model === 'olympiccoder-7b') {
+        return await generateCode(content, { primaryModel: 'olympiccoder' });
+      } else if (model === 'hybrid') {
+        return await generateCode(content, { primaryModel: 'hybrid' });
+      } else {
+        throw new Error(`Unsupported model: ${model}`);
+      }
+    }
+  },
+  errorHandler,
+  performanceMonitor
+);
+
+// OpenManus autonomous project endpoints
+aiRouter.post('/openmanus/project', async (req, res) => {
+  try {
+    const { name, description, language, framework, features, constraints } = req.body;
+    
+    if (!name || !description) {
+      return res.status(400).json({ error: 'Project name and description are required' });
+    }
+    
+    const projectId = await openManusIntegration.createProject({
+      name,
+      description,
+      language,
+      framework,
+      features,
+      constraints
+    });
+    
+    res.status(201).json({ 
+      projectId,
+      message: 'Autonomous project created successfully'
+    });
+  } catch (error) {
+    errorHandler.handleError(error, req, res);
+  }
+});
+
+aiRouter.get('/openmanus/project/:id', async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+    
+    const status = openManusIntegration.getProjectStatus(projectId);
+    res.json(status);
+  } catch (error) {
+    errorHandler.handleError(error, req, res);
+  }
+});
+
+aiRouter.get('/openmanus/projects', async (req, res) => {
+  try {
+    const projects = openManusIntegration.getAllProjects();
+    res.json(projects);
+  } catch (error) {
+    errorHandler.handleError(error, req, res);
+  }
+});
+
+aiRouter.get('/openmanus/project/:id/files', async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+    
+    const files = openManusIntegration.getProjectFiles(projectId);
+    res.json(files);
+  } catch (error) {
+    errorHandler.handleError(error, req, res);
+  }
+});
+
 // Initialize model processes when server starts
 (async () => {
   try {
     const initialized = await initializeModelProcesses();
     console.log(`[AI] Model processes ${initialized ? 'successfully initialized' : 'failed to initialize'}`);
+    
+    // Initialize OpenManus integration
+    await openManusIntegration.initialize();
+    console.log(`[AI] OpenManus integration ${initialized ? 'successfully initialized' : 'failed to initialize'}`);
   } catch (error) {
     console.error('[AI] Error initializing model processes:', error);
   }
