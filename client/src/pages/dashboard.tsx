@@ -272,7 +272,14 @@ export default function Dashboard() {
 
   // Handle project creation
   const onProjectSubmit = (data: z.infer<typeof projectSchema>) => {
-    createProjectMutation.mutate(data);
+    // Check if the advanced agentic system checkbox is checked
+    const useOpenManus = data.primaryModel === 'openmanus';
+    
+    if (useOpenManus) {
+      createOpenManusProjectMutation.mutate(data);
+    } else {
+      createProjectMutation.mutate(data);
+    }
   };
 
   // Handle code generation
@@ -471,6 +478,7 @@ export default function Dashboard() {
                                 <SelectItem value="hybrid">Hybrid (Both Models)</SelectItem>
                                 <SelectItem value="qwen2.5-7b-omni">Qwen2.5-7b-omni</SelectItem>
                                 <SelectItem value="olympiccoder-7b">OlympicCoder-7B</SelectItem>
+                                <SelectItem value="openmanus">OpenManus (Advanced Agentic System)</SelectItem>
                               </SelectContent>
                             </Select>
                           </FormItem>
@@ -523,122 +531,199 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Your Projects</CardTitle>
-                <CardDescription>
-                  Manage your autonomous software projects
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {projectsLoading ? (
-                  <div className="flex items-center justify-center p-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-border" />
-                  </div>
-                ) : projects && projects.projects && projects.projects.length > 0 ? (
-                  <div className="space-y-4">
-                    {projects.projects.map((project: any) => (
-                      <Card 
-                        key={project.id} 
-                        className={`border-l-4 ${
-                          selectedProject === project.id ? 'border-l-primary' : 'border-l-border'
-                        } cursor-pointer hover:shadow-md transition-all`}
-                        onClick={() => setSelectedProject(project.id)}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h3 className="font-bold">{project.name}</h3>
-                              <p className="text-sm text-muted-foreground">{project.description}</p>
-                            </div>
-                            <div className="flex gap-2">
-                              <Badge className={getStatusColor(project.status)}>
-                                {project.status.replace('_', ' ')}
-                              </Badge>
-                              <Badge className={getPhaseColor(project.currentPhase)}>
-                                {project.currentPhase.replace('_', ' ')}
-                              </Badge>
-                            </div>
-                          </div>
-                          <div className="mt-2">
-                            <Progress value={project.progress || 0} className="h-2" />
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-2">
-                            Started: {formatTime(project.startTime)}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center p-8 border rounded-lg border-dashed">
-                    <p>No projects found. Create your first autonomous project!</p>
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter className="justify-between">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => refetchProjects()}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh
-                </Button>
-                {selectedProject && (
-                  <div className="space-x-2">
-                    <Button
-                      variant="outline"
+            <Tabs defaultValue="continuous" className="w-full">
+              <TabsList className="w-full">
+                <TabsTrigger value="continuous" className="flex-1">Continuous Execution</TabsTrigger>
+                <TabsTrigger value="openmanus" className="flex-1">OpenManus Agentic</TabsTrigger>
+              </TabsList>
+              <TabsContent value="continuous">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Your Projects</CardTitle>
+                    <CardDescription>
+                      Manage your autonomous software projects
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {projectsLoading ? (
+                      <div className="flex items-center justify-center p-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-border" />
+                      </div>
+                    ) : projects && projects.projects && projects.projects.length > 0 ? (
+                      <div className="space-y-4">
+                        {projects.projects.map((project: any) => (
+                          <Card 
+                            key={project.id} 
+                            className={`border-l-4 ${
+                              selectedProject === project.id ? 'border-l-primary' : 'border-l-border'
+                            } cursor-pointer hover:shadow-md transition-all`}
+                            onClick={() => setSelectedProject(project.id)}
+                          >
+                            <CardContent className="p-4">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h3 className="font-bold">{project.name}</h3>
+                                  <p className="text-sm text-muted-foreground">{project.description}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Badge className={getStatusColor(project.status)}>
+                                    {project.status.replace('_', ' ')}
+                                  </Badge>
+                                  <Badge className={getPhaseColor(project.currentPhase)}>
+                                    {project.currentPhase.replace('_', ' ')}
+                                  </Badge>
+                                </div>
+                              </div>
+                              <div className="mt-2">
+                                <Progress value={project.progress || 0} className="h-2" />
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-2">
+                                Started: {formatTime(project.startTime)}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center p-8 border rounded-lg border-dashed">
+                        <p>No projects found. Create your first autonomous project!</p>
+                      </div>
+                    )}
+                  </CardContent>
+                  <CardFooter className="justify-between">
+                    <Button 
+                      variant="outline" 
                       size="sm"
-                      disabled={
-                        projectControlMutation.isPending || 
-                        projectDetailsLoading ||
-                        (projectDetails?.status !== 'in_progress' && projectDetails?.status !== 'paused')
-                      }
-                      onClick={() => {
-                        if (projectDetails?.status === 'in_progress') {
-                          projectControlMutation.mutate({ 
-                            id: selectedProject, 
-                            action: 'pause' 
-                          });
-                        } else if (projectDetails?.status === 'paused') {
-                          projectControlMutation.mutate({ 
-                            id: selectedProject, 
-                            action: 'resume' 
-                          });
-                        }
-                      }}
+                      onClick={() => refetchProjects()}
                     >
-                      {projectControlMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : projectDetails?.status === 'in_progress' ? (
-                        <Pause className="h-4 w-4" />
-                      ) : (
-                        <Play className="h-4 w-4" />
-                      )}
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh
                     </Button>
-                    <Button
-                      variant="destructive"
+                    {selectedProject && (
+                      <div className="space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={
+                            projectControlMutation.isPending || 
+                            projectDetailsLoading ||
+                            (projectDetails?.status !== 'in_progress' && projectDetails?.status !== 'paused')
+                          }
+                          onClick={() => {
+                            if (projectDetails?.status === 'in_progress') {
+                              projectControlMutation.mutate({ 
+                                id: selectedProject, 
+                                action: 'pause' 
+                              });
+                            } else if (projectDetails?.status === 'paused') {
+                              projectControlMutation.mutate({ 
+                                id: selectedProject, 
+                                action: 'resume' 
+                              });
+                            }
+                          }}
+                        >
+                          {projectControlMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : projectDetails?.status === 'in_progress' ? (
+                            <Pause className="h-4 w-4" />
+                          ) : (
+                            <Play className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={
+                            projectControlMutation.isPending || 
+                            projectDetailsLoading ||
+                            projectDetails?.status === 'completed' || 
+                            projectDetails?.status === 'failed'
+                          }
+                          onClick={() => {
+                            projectControlMutation.mutate({ 
+                              id: selectedProject, 
+                              action: 'cancel' 
+                            });
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    )}
+                  </CardFooter>
+                </Card>
+              </TabsContent>
+              
+              <TabsContent value="openmanus">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>OpenManus Agentic Projects</CardTitle>
+                    <CardDescription>
+                      Manage your advanced agentic system projects
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {openManusProjectsLoading ? (
+                      <div className="flex items-center justify-center p-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-border" />
+                      </div>
+                    ) : openManusProjects && openManusProjects.length > 0 ? (
+                      <div className="space-y-4">
+                        {openManusProjects.map((project: any) => (
+                          <Card 
+                            key={project.project_id} 
+                            className={`border-l-4 border-l-indigo-500 cursor-pointer hover:shadow-md transition-all`}
+                          >
+                            <CardContent className="p-4">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h3 className="font-bold">{project.project_name}</h3>
+                                  <p className="text-sm text-muted-foreground">{project.requirements}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Badge className={getStatusColor(project.status)}>
+                                    {project.status.replace('_', ' ')}
+                                  </Badge>
+                                </div>
+                              </div>
+                              <div className="mt-2">
+                                <Progress value={project.progress || 0} className="h-2" />
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-2">
+                                Started: {project.started_at ? formatTime(project.started_at) : 'Not started yet'}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                <Badge variant="outline">Language: {project.language || 'Not specified'}</Badge>
+                                <Badge variant="outline">Framework: {project.framework || 'Not specified'}</Badge>
+                                <Badge variant="outline">Tasks: {project.subtask_counts?.total || 0}</Badge>
+                                <Badge variant="outline" className="bg-green-100">Completed: {project.subtask_counts?.completed || 0}</Badge>
+                                <Badge variant="outline" className="bg-yellow-100">In Progress: {project.subtask_counts?.in_progress || 0}</Badge>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center p-8 border rounded-lg border-dashed">
+                        <p>No OpenManus projects found. Create your first agentic project by selecting "OpenManus" in the "Primary Model" dropdown!</p>
+                      </div>
+                    )}
+                  </CardContent>
+                  <CardFooter>
+                    <Button 
+                      variant="outline" 
                       size="sm"
-                      disabled={
-                        projectControlMutation.isPending || 
-                        projectDetailsLoading ||
-                        projectDetails?.status === 'completed' || 
-                        projectDetails?.status === 'failed'
-                      }
-                      onClick={() => {
-                        projectControlMutation.mutate({ 
-                          id: selectedProject, 
-                          action: 'cancel' 
-                        });
-                      }}
+                      onClick={() => refetchOpenManusProjects()}
+                      className="w-full"
                     >
-                      Cancel
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh OpenManus Projects
                     </Button>
-                  </div>
-                )}
-              </CardFooter>
-            </Card>
+                  </CardFooter>
+                </Card>
+              </TabsContent>
+            </Tabs>
           </div>
 
           {/* Project Details */}
