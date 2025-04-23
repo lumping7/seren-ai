@@ -257,19 +257,18 @@ I've analyzed your query: "${prompt}"
 
 ${modelPrefix}I can help you with this request, but I need to inform you that the system currently uses templated responses rather than actual AI model inferences. 
 
-In a production deployment:
-- Real LLM models would be installed via Ollama or similar local services
-- Each prompt would be processed by the actual AI models
-- Responses would be truly generated, not pre-defined
+For this system to work with real AI models, you need to install Ollama and the required models.
 
-To make this system work with real AI:
-1. Install Ollama locally
-2. Add the qwen2.5-7b-omni and olympiccoder-7b models
-3. Update the code to connect to these models
+Please refer to the documentation at docs/LLM-SETUP.md for detailed instructions on how to set up Ollama with the necessary models.
+
+The key steps include:
+1. Installing Ollama from ollama.com
+2. Pulling the qwen2:7b and codellama:7b models
+3. Ensuring Ollama is running at http://127.0.0.1:11434
 
 For now, I can only provide these pre-written demonstration responses rather than true AI-generated content.
 
-Would you like me to explain how to integrate actual LLM models into this system?`;
+Would you like me to know more about setting up real AI models for this system?`;
     }
     
     // Log success and return response

@@ -9,6 +9,7 @@ import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
 import UnifiedInterface from "@/pages/unified-interface";
 import VirtualComputerPage from "@/pages/virtual-computer";
+import SetupGuide from "@/pages/setup-guide";
 import { ProtectedRoute } from "@/lib/protected-route";
 
 function Router() {
@@ -16,6 +17,7 @@ function Router() {
     <Switch>
       <ProtectedRoute path="/" component={UnifiedInterface} />
       <Route path="/virtual-computer" component={VirtualComputerPage} />
+      <Route path="/setup-guide" component={SetupGuide} />
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
