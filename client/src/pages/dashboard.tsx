@@ -19,6 +19,8 @@ import {
   Search,
   MessageSquare
 } from 'lucide-react';
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 
 import {
   Card,
@@ -51,294 +53,631 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, logoutMutation } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('projects');
-  const [selectedProject, setSelectedProject] = useState<string | null>(null);
-  const [selectedOpenManusProject, setSelectedOpenManusProject] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('overview');
   
   // Get models status
   const { data: modelStatus, isLoading: modelsLoading } = useQuery({
     queryKey: ['/api/ai/models/status'],
     refetchInterval: 10000,
+    staleTime: 5000,
+    enabled: false, // Temporarily disable this query until API is ready
   });
 
-  // Get continuous execution projects
-  const { 
-    data: projects, 
-    isLoading: projectsLoading, 
-    refetch: refetchProjects 
-  } = useQuery({
-    queryKey: ['/api/ai/continuous/project'],
-    refetchInterval: selectedProject ? 5000 : false,
-  });
-  
-  // Get OpenManus projects
-  const {
-    data: openManusProjects,
-    isLoading: openManusProjectsLoading,
-    refetch: refetchOpenManusProjects
-  } = useQuery({
-    queryKey: ['/api/ai/openmanus/projects'],
-    refetchInterval: selectedOpenManusProject ? 5000 : false,
+  // Get system settings
+  const { data: systemSettings, isLoading: settingsLoading } = useQuery({
+    queryKey: ['/api/settings'],
+    staleTime: 60000,
+    enabled: false, // Temporarily disable this query until API is ready
   });
 
-  // Get selected project details
-  const { 
-    data: projectDetails, 
-    isLoading: projectDetailsLoading, 
-    refetch: refetchProjectDetails 
-  } = useQuery({
-    queryKey: ['/api/ai/continuous/project', selectedProject],
-    enabled: !!selectedProject,
-    refetchInterval: 3000,
-  });
-  
-  // Get OpenManus project details
-  const {
-    data: openManusProjectDetails,
-    isLoading: openManusProjectDetailsLoading,
-    refetch: refetchOpenManusProjectDetails
-  } = useQuery({
-    queryKey: ['/api/ai/openmanus/project', selectedOpenManusProject],
-    enabled: !!selectedOpenManusProject,
-    refetchInterval: 3000,
-  });
+  // Handle logout
+  const handleLogout = () => {
+    logoutMutation.mutate();
+  };
 
-  // Create new project mutation
-  const createProjectMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof projectSchema>) => {
-      const response = await apiRequest('POST', '/api/ai/continuous/project', data);
-      return await response.json();
+  // Simulation data for models (until API is ready)
+  const simulatedModelStatus = {
+    qwen: {
+      status: "ready",
+      uptime: "2h 15m",
+      memory: "4.2 GB",
+      supportedTasks: ["text-generation", "reasoning", "code-generation"]
     },
-    onSuccess: () => {
-      toast({
-        title: 'Project created',
-        description: 'Your autonomous project has been started successfully',
-      });
-      refetchProjects();
-      projectForm.reset();
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error creating project',
-        description: error.message || 'Failed to create project',
-        variant: 'destructive',
-      });
-    },
-  });
-  
-  // Create new OpenManus project mutation
-  const createOpenManusProjectMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof projectSchema>) => {
-      const response = await apiRequest('POST', '/api/ai/openmanus/project', {
-        name: data.name,
-        description: data.description,
-        language: data.language,
-        framework: data.framework,
-        features: [],
-        constraints: []
-      });
-      return await response.json();
-    },
-    onSuccess: (data) => {
-      toast({
-        title: 'OpenManus Project created',
-        description: 'Your agentic project has been started with project ID: ' + data.projectId,
-      });
-      refetchOpenManusProjects();
-      projectForm.reset();
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error creating OpenManus project',
-        description: error.message || 'Failed to create project',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  // Project control mutation
-  const projectControlMutation = useMutation({
-    mutationFn: async ({ id, action }: { id: string, action: 'pause' | 'resume' | 'cancel' }) => {
-      const response = await apiRequest('POST', `/api/ai/continuous/project/${id}/action`, { action });
-      return await response.json();
-    },
-    onSuccess: () => {
-      refetchProjectDetails();
-      refetchProjects();
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error controlling project',
-        description: error.message || 'Failed to execute action',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  // Generate code mutation
-  const generateCodeMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof codeGenSchema>) => {
-      const response = await apiRequest('POST', '/api/ai/models/generate', data);
-      return await response.json();
-    },
-    onSuccess: (data) => {
-      toast({
-        title: 'Code generated',
-        description: 'The AI dev team has generated code based on your requirements',
-      });
-      
-      // Update the code in the form
-      if (data.code) {
-        enhanceForm.setValue('code', data.code);
-      }
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error generating code',
-        description: error.message || 'Failed to generate code',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  // Enhance code mutation
-  const enhanceCodeMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof enhanceSchema>) => {
-      const response = await apiRequest('POST', '/api/ai/models/enhance', data);
-      return await response.json();
-    },
-    onSuccess: (data) => {
-      toast({
-        title: 'Code enhanced',
-        description: `The AI dev team has ${enhanceForm.getValues('enhancement')}d your code`,
-      });
-      
-      // Update the code in the form with the enhanced version
-      if (data.enhanced_code) {
-        enhanceForm.setValue('code', data.enhanced_code);
-      }
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error enhancing code',
-        description: error.message || 'Failed to enhance code',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  // Project creation form
-  const projectForm = useForm<z.infer<typeof projectSchema>>({
-    resolver: zodResolver(projectSchema),
-    defaultValues: {
-      name: '',
-      description: '',
-      requirements: '',
-      primaryModel: 'hybrid',
-      language: '',
-      framework: '',
-      priorityLevel: 'medium',
-    },
-  });
-
-  // Code generation form
-  const codeGenForm = useForm<z.infer<typeof codeGenSchema>>({
-    resolver: zodResolver(codeGenSchema),
-    defaultValues: {
-      requirements: '',
-      language: '',
-      framework: '',
-      primaryModel: 'hybrid',
-    },
-  });
-
-  // Code enhancement form
-  const enhanceForm = useForm<z.infer<typeof enhanceSchema>>({
-    resolver: zodResolver(enhanceSchema),
-    defaultValues: {
-      code: '',
-      enhancement: 'optimize',
-      language: '',
-      requirements: '',
-    },
-  });
-
-  // Handle project creation
-  const onProjectSubmit = (data: z.infer<typeof projectSchema>) => {
-    // Check if the advanced agentic system checkbox is checked
-    const useOpenManus = data.primaryModel === 'openmanus';
-    
-    if (useOpenManus) {
-      createOpenManusProjectMutation.mutate(data);
-    } else {
-      createProjectMutation.mutate(data);
+    olympicCoder: {
+      status: "ready",
+      uptime: "2h 15m",
+      memory: "4.0 GB",
+      supportedTasks: ["code-generation", "code-optimization", "bug-fixing"]
     }
   };
 
-  // Handle code generation
-  const onCodeGenSubmit = (data: z.infer<typeof codeGenSchema>) => {
-    generateCodeMutation.mutate(data);
-  };
-
-  // Handle code enhancement
-  const onEnhanceSubmit = (data: z.infer<typeof enhanceSchema>) => {
-    enhanceCodeMutation.mutate(data);
-  };
-
-  // Get status badge color based on project status
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'initializing':
-        return 'bg-yellow-500';
-      case 'in_progress':
-        return 'bg-blue-500';
-      case 'paused':
-        return 'bg-orange-500';
-      case 'completed':
-        return 'bg-green-500';
-      case 'failed':
-        return 'bg-red-500';
-      default:
-        return 'bg-gray-500';
-    }
-  };
-
-  // Get phase badge color based on project phase
-  const getPhaseColor = (phase: string) => {
-    switch (phase) {
-      case 'requirements_analysis':
-        return 'bg-purple-500';
-      case 'architecture_design':
-        return 'bg-indigo-500';
-      case 'implementation':
-        return 'bg-blue-500';
-      case 'testing':
-        return 'bg-cyan-500';
-      case 'optimization':
-        return 'bg-teal-500';
-      case 'documentation':
-        return 'bg-green-500';
-      case 'delivery':
-        return 'bg-emerald-500';
-      default:
-        return 'bg-gray-500';
-    }
-  };
-
-  // Format timestamp to readable format
-  const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString();
-  };
-
+  // Loading state
   if (!user) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-border" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
+  
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Brain className="h-8 w-8 text-primary" />
+            <h1 className="text-xl font-bold">Seren AI</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground">
+              Logged in as <span className="font-medium text-foreground">{user.username}</span>
+              {user.isAdmin && <Badge className="ml-2 bg-primary">Admin</Badge>}
+            </span>
+            <Button variant="outline" size="sm" onClick={handleLogout} disabled={logoutMutation.isPending}>
+              {logoutMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Logout"
+              )}
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main content */}
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+            <p className="text-muted-foreground">
+              Welcome to Seren, your advanced AI development platform
+            </p>
+          </div>
+        </div>
+
+        <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="overview">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="models">
+              <Brain className="h-4 w-4 mr-2" />
+              AI Models
+            </TabsTrigger>
+            <TabsTrigger value="chat">
+              <MessageSquare className="h-4 w-4 mr-2" />
+              AI Chat
+            </TabsTrigger>
+            <TabsTrigger value="settings">
+              <Settings className="h-4 w-4 mr-2" />
+              Settings
+            </TabsTrigger>
+          </TabsList>
+          
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Models Status</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">2/2</div>
+                  <p className="text-xs text-muted-foreground">
+                    Models online and operational
+                  </p>
+                  <div className="mt-4 h-1 w-full bg-secondary">
+                    <div className="h-1 bg-primary" style={{ width: '100%' }} />
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Knowledge Base</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">24.5k</div>
+                  <p className="text-xs text-muted-foreground">
+                    Entries in knowledge library
+                  </p>
+                  <div className="mt-4 h-1 w-full bg-secondary">
+                    <div className="h-1 bg-primary" style={{ width: '80%' }} />
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">System Health</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">98.5%</div>
+                  <p className="text-xs text-muted-foreground">
+                    System operational efficiency
+                  </p>
+                  <div className="mt-4 h-1 w-full bg-secondary">
+                    <div className="h-1 bg-primary" style={{ width: '98.5%' }} />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="col-span-1">
+                <CardHeader>
+                  <CardTitle>Recent Activity</CardTitle>
+                  <CardDescription>
+                    Latest system operations and events
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[300px]">
+                    <div className="space-y-4">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="flex items-start gap-4">
+                          <div className="rounded-full p-2 bg-primary/10">
+                            <Brain className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium">AI Model Training Complete</p>
+                            <p className="text-xs text-muted-foreground">
+                              Neurosymbolic module trained on new data
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(Date.now() - i * 3600000).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+              
+              <Card className="col-span-1">
+                <CardHeader>
+                  <CardTitle>System Architecture</CardTitle>
+                  <CardDescription>
+                    Current system components and integrations
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Brain className="h-5 w-5 text-primary" />
+                        <span className="font-medium">AI Core</span>
+                      </div>
+                      <Badge variant="outline" className="text-green-600 bg-green-50">Active</Badge>
+                    </div>
+                    <Separator />
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <ArrowRight className="h-5 w-5 text-primary" />
+                        <span className="font-medium">Neuro-Symbolic Reasoning</span>
+                      </div>
+                      <Badge variant="outline" className="text-green-600 bg-green-50">Active</Badge>
+                    </div>
+                    <Separator />
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <RefreshCw className="h-5 w-5 text-primary" />
+                        <span className="font-medium">Metacognitive System</span>
+                      </div>
+                      <Badge variant="outline" className="text-green-600 bg-green-50">Active</Badge>
+                    </div>
+                    <Separator />
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-primary" />
+                        <span className="font-medium">Knowledge Library</span>
+                      </div>
+                      <Badge variant="outline" className="text-green-600 bg-green-50">Active</Badge>
+                    </div>
+                    <Separator />
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Code className="h-5 w-5 text-primary" />
+                        <span className="font-medium">Code Generation</span>
+                      </div>
+                      <Badge variant="outline" className="text-green-600 bg-green-50">Active</Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+          
+          {/* AI Models Tab */}
+          <TabsContent value="models" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Qwen2.5-7b-omni</CardTitle>
+                  <CardDescription>
+                    Advanced reasoning and general-purpose AI model
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium">Status</p>
+                      <Badge variant="outline" className="mt-1 text-green-600 bg-green-50">
+                        {simulatedModelStatus.qwen.status}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Uptime</p>
+                      <p className="text-sm">{simulatedModelStatus.qwen.uptime}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Memory Usage</p>
+                      <p className="text-sm">{simulatedModelStatus.qwen.memory}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Model Type</p>
+                      <p className="text-sm">Qwen 2.5 Omni</p>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <p className="text-sm font-medium mb-2">Supported Tasks</p>
+                    <div className="flex flex-wrap gap-2">
+                      {simulatedModelStatus.qwen.supportedTasks.map((task, i) => (
+                        <Badge key={i} variant="secondary">{task}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="flex justify-between">
+                    <Button variant="outline" size="sm">
+                      View Logs
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh Status
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>OlympicCoder-7B</CardTitle>
+                  <CardDescription>
+                    Specialized code generation and software development model
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium">Status</p>
+                      <Badge variant="outline" className="mt-1 text-green-600 bg-green-50">
+                        {simulatedModelStatus.olympicCoder.status}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Uptime</p>
+                      <p className="text-sm">{simulatedModelStatus.olympicCoder.uptime}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Memory Usage</p>
+                      <p className="text-sm">{simulatedModelStatus.olympicCoder.memory}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Model Type</p>
+                      <p className="text-sm">Olympic Coder</p>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <p className="text-sm font-medium mb-2">Supported Tasks</p>
+                    <div className="flex flex-wrap gap-2">
+                      {simulatedModelStatus.olympicCoder.supportedTasks.map((task, i) => (
+                        <Badge key={i} variant="secondary">{task}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="flex justify-between">
+                    <Button variant="outline" size="sm">
+                      View Logs
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh Status
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle>Model Integration</CardTitle>
+                <CardDescription>
+                  Control how the AI models collaborate and interact
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <div className="font-medium">Collaboration Mode</div>
+                      <Select defaultValue="hybrid">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select collaboration mode" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="collaborative">Collaborative</SelectItem>
+                          <SelectItem value="specialized">Specialized</SelectItem>
+                          <SelectItem value="competitive">Competitive</SelectItem>
+                          <SelectItem value="hybrid">Hybrid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="font-medium">Primary Model</div>
+                      <Select defaultValue="both">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select primary model" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="qwen">Qwen2.5-7b-omni</SelectItem>
+                          <SelectItem value="olympicCoder">OlympicCoder-7B</SelectItem>
+                          <SelectItem value="both">Both (Equal)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="font-medium">Processing Priority</div>
+                      <Select defaultValue="balanced">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select processing priority" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="speed">Speed</SelectItem>
+                          <SelectItem value="quality">Quality</SelectItem>
+                          <SelectItem value="balanced">Balanced</SelectItem>
+                          <SelectItem value="efficiency">Efficiency</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="space-y-2">
+                    <div className="font-medium">Reasoning Depth</div>
+                    <div className="flex items-center space-x-2">
+                      <Slider defaultValue={[7]} max={10} step={1} />
+                      <span className="w-12 text-center">7/10</span>
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  <Button>Save Configuration</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          {/* AI Chat Tab */}
+          <TabsContent value="chat" className="space-y-4">
+            <Card className="h-[600px] flex flex-col">
+              <CardHeader>
+                <CardTitle>AI Chat Assistant</CardTitle>
+                <CardDescription>
+                  Interact with the AI system directly
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex-grow overflow-hidden flex flex-col">
+                <ScrollArea className="flex-grow pr-4">
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-full p-2 bg-primary/10">
+                        <Brain className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="bg-muted p-3 rounded-lg">
+                        <p className="text-sm">
+                          Hello! I'm Seren, your advanced AI assistant. I combine Qwen2.5-7b-omni and OlympicCoder-7B models 
+                          with neuro-symbolic reasoning. How can I help you today?
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start gap-3 justify-end">
+                      <div className="bg-primary p-3 rounded-lg">
+                        <p className="text-sm text-primary-foreground">
+                          What capabilities do you have?
+                        </p>
+                      </div>
+                      <div className="rounded-full p-2 bg-primary">
+                        <div className="h-5 w-5 text-primary-foreground flex items-center justify-center text-xs font-bold">
+                          U
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-full p-2 bg-primary/10">
+                        <Brain className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="bg-muted p-3 rounded-lg">
+                        <p className="text-sm">
+                          I have several advanced capabilities:
+                        </p>
+                        <ul className="list-disc text-sm mt-2 space-y-1 pl-4">
+                          <li>Software development with an autonomous agent system</li>
+                          <li>Neuro-symbolic reasoning for enhanced problem-solving</li>
+                          <li>Autonomous code generation, optimization, and testing</li>
+                          <li>Knowledge library access and dynamic learning</li>
+                          <li>Self-improving capabilities through metacognition</li>
+                        </ul>
+                        <p className="text-sm mt-2">
+                          Would you like me to explain any of these capabilities in more detail?
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </ScrollArea>
+              </CardContent>
+              <div className="p-4 border-t">
+                <div className="flex gap-2">
+                  <Input placeholder="Type your message here..." className="flex-grow" />
+                  <Button>Send</Button>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+          
+          {/* Settings Tab */}
+          <TabsContent value="settings" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>System Settings</CardTitle>
+                <CardDescription>
+                  Configure the AI system's behavior and parameters
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">AI Core</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="font-medium">Response Quality</div>
+                      <Select defaultValue="balanced">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select quality level" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="fast">Fast (Lower Quality)</SelectItem>
+                          <SelectItem value="balanced">Balanced</SelectItem>
+                          <SelectItem value="high">High Quality (Slower)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="font-medium">Memory Retention</div>
+                      <Select defaultValue="medium">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select retention level" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Low (Session-Only)</SelectItem>
+                          <SelectItem value="medium">Medium (Days)</SelectItem>
+                          <SelectItem value="high">High (Persistent)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+                
+                <Separator />
+                
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Security</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="font-medium">Quantum Encryption</div>
+                      <div className="flex items-center space-x-2">
+                        <Switch id="quantum-encryption" defaultChecked />
+                        <label htmlFor="quantum-encryption">Enabled</label>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="font-medium">Access Level</div>
+                      <Select defaultValue="admin">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select access level" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="user">User</SelectItem>
+                          <SelectItem value="developer">Developer</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+                
+                <Separator />
+                
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Advanced</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="font-medium">Metacognitive System</div>
+                      <div className="flex items-center space-x-2">
+                        <Switch id="metacognitive" defaultChecked />
+                        <label htmlFor="metacognitive">Enabled</label>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="font-medium">Autonomous Evolution</div>
+                      <div className="flex items-center space-x-2">
+                        <Switch id="evolution" />
+                        <label htmlFor="evolution">Disabled</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <Separator />
+                
+                <Button className="mr-2">Save Settings</Button>
+                <Button variant="outline">Reset to Defaults</Button>
+              </CardContent>
+            </Card>
+            
+            {user.isAdmin && (
+              <Card className="border-primary/50">
+                <CardHeader>
+                  <CardTitle>Admin Controls</CardTitle>
+                  <CardDescription>
+                    Advanced system management for administrators
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Button variant="outline">System Backup</Button>
+                    <Button variant="outline">Restore Checkpoint</Button>
+                    <Button variant="outline">Export Logs</Button>
+                    <Button variant="outline">Manage Users</Button>
+                  </div>
+                  
+                  <Separator />
+                  
+                  <Button variant="destructive">
+                    Emergency Shutdown
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
 
   return (
     <div className="container mx-auto py-10">
