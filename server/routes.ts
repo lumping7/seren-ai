@@ -9,6 +9,8 @@ import { healthRouter } from "./health";
 import { isDatabaseAvailable } from "./db";
 import { modelServices } from "./ai";
 import { generateDirectResponse, ModelType } from './ai/direct-integration';
+import fs from 'fs';
+import path from 'path';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
@@ -190,6 +192,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(setting);
     } catch (error) {
       res.status(500).json({ message: "Failed to update setting" });
+    }
+  });
+  
+  // Production package download endpoint
+  app.get("/download/production", (req, res) => {
+    try {
+      const filePath = path.resolve('./seren-ai-20250423.tar.gz');
+      
+      // Check if file exists
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ 
+          error: "Package not found",
+          message: "The production package file could not be found" 
+        });
+      }
+      
+      // Set headers for file download
+      res.setHeader('Content-Disposition', 'attachment; filename=seren-ai-20250423.tar.gz');
+      res.setHeader('Content-Type', 'application/gzip');
+      
+      // Stream the file
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+      
+      console.log('Serving production package download');
+    } catch (error) {
+      console.error("Error serving production package:", error);
+      res.status(500).json({
+        error: "Internal server error",
+        message: "An error occurred processing your download request"
+      });
     }
   });
 
