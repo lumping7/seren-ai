@@ -4,6 +4,8 @@ let socket: WebSocket | null = null;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
 const reconnectDelay = 2000;
+let reconnectTimer: NodeJS.Timeout | null = null;
+let messageQueue: WebSocketMessage[] = [];
 
 type MessageHandler = (message: WebSocketMessage) => void;
 const messageHandlers: MessageHandler[] = [];
@@ -11,14 +13,25 @@ const messageHandlers: MessageHandler[] = [];
 export function connectWebSocket(userId?: number): WebSocket {
   // If socket is already open, return it
   if (socket && socket.readyState === WebSocket.OPEN) {
+    console.log("Reusing existing WebSocket connection");
     return socket;
+  }
+  
+  // Clear any pending reconnect timer
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
   }
   
   // Close existing socket if not already closed
   if (socket && socket.readyState !== WebSocket.CLOSED) {
+    console.log("Closing existing socket before creating a new one");
+    socket.onclose = null; // Prevent triggering reconnect logic when we're closing intentionally
     socket.close();
   }
 
+  console.log("Creating new WebSocket connection");
+  
   // Determine the correct protocol and URL
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.host;
@@ -33,13 +46,28 @@ export function connectWebSocket(userId?: number): WebSocket {
     
     // Send authentication if user is logged in
     if (userId) {
+      console.log("Sending authentication");
       // Use a small delay to ensure socket is fully ready
       setTimeout(() => {
-        sendMessage({
-          type: 'auth',
-          data: { userId }
-        });
-      }, 100);
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          sendMessage({
+            type: 'auth',
+            data: { userId }
+          });
+          
+          // Process any queued messages
+          if (messageQueue.length > 0) {
+            console.log(`Processing ${messageQueue.length} queued messages`);
+            [...messageQueue].forEach(msg => {
+              if (sendMessage(msg)) {
+                // Only remove from queue if sent successfully
+                const index = messageQueue.indexOf(msg);
+                if (index !== -1) messageQueue.splice(index, 1);
+              }
+            });
+          }
+        }
+      }, 200);
     }
   };
   
@@ -48,7 +76,13 @@ export function connectWebSocket(userId?: number): WebSocket {
       const data = JSON.parse(event.data) as WebSocketMessage;
       
       // Notify all registered handlers
-      messageHandlers.forEach(handler => handler(data));
+      messageHandlers.forEach(handler => {
+        try {
+          handler(data);
+        } catch (handlerError) {
+          console.error("Error in message handler:", handlerError);
+        }
+      });
       
     } catch (error) {
       console.error("Failed to parse WebSocket message:", error);
@@ -56,12 +90,12 @@ export function connectWebSocket(userId?: number): WebSocket {
   };
   
   socket.onclose = (event) => {
-    console.log(`WebSocket closed: ${event.code} ${event.reason}`);
+    console.log(`WebSocket closed: ${event.code} ${event.reason || ''}`);
     socket = null;
     
     // Attempt to reconnect if not a normal closure
     if (event.code !== 1000 && event.code !== 1001) {
-      tryReconnect();
+      tryReconnect(userId);
     }
   };
   
@@ -73,59 +107,44 @@ export function connectWebSocket(userId?: number): WebSocket {
   return socket;
 }
 
-function tryReconnect() {
+function tryReconnect(userId?: number) {
   if (reconnectAttempts >= maxReconnectAttempts) {
     console.error("Max reconnect attempts reached. Please refresh the page.");
     return;
   }
   
-  reconnectAttempts++;
+  // Clear any existing timer
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+  }
   
-  setTimeout(() => {
+  reconnectAttempts++;
+  const delay = reconnectDelay * reconnectAttempts;
+  
+  console.log(`Scheduling reconnect in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})...`);
+  
+  reconnectTimer = setTimeout(() => {
     console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})...`);
-    connectWebSocket();
-  }, reconnectDelay * reconnectAttempts);
+    connectWebSocket(userId);
+  }, delay);
 }
 
 export function sendMessage(message: WebSocketMessage): boolean {
   // Check if socket exists
   if (!socket) {
-    console.warn("No WebSocket connection exists. Attempting to connect...");
-    socket = connectWebSocket();
-    
-    // Queue message to be sent once connected
-    const queuedMessage = { ...message };
-    setTimeout(() => {
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        console.log("Sending queued message");
-        socket.send(JSON.stringify(queuedMessage));
-      } else {
-        console.error("Failed to send queued message: WebSocket not ready");
-      }
-    }, 500);
-    
+    console.warn("No WebSocket connection exists. Queueing message.");
+    messageQueue.push(message);
     return false;
   }
   
   // Check socket state
   if (socket.readyState === WebSocket.CONNECTING) {
     console.log("WebSocket is still connecting. Queueing message...");
-    
-    // Queue message to be sent once connected
-    const queuedMessage = { ...message };
-    setTimeout(() => {
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        console.log("Sending queued message");
-        socket.send(JSON.stringify(queuedMessage));
-      } else {
-        console.error("Failed to send queued message: WebSocket not ready");
-      }
-    }, 500);
-    
+    messageQueue.push(message);
     return false;
   } else if (socket.readyState !== WebSocket.OPEN) {
-    console.error(`WebSocket is not open (state: ${socket.readyState}). Reconnecting...`);
-    socket = connectWebSocket();
+    console.error(`WebSocket is not open (state: ${socket.readyState}). Queueing message and reconnecting...`);
+    messageQueue.push(message);
     return false;
   }
   
@@ -135,6 +154,7 @@ export function sendMessage(message: WebSocketMessage): boolean {
     return true;
   } catch (error) {
     console.error("Error sending WebSocket message:", error);
+    messageQueue.push(message);
     return false;
   }
 }
@@ -142,37 +162,33 @@ export function sendMessage(message: WebSocketMessage): boolean {
 export function sendChatMessage(message: AIMessage): boolean {
   console.log('Attempting to send chat message via WebSocket', message.conversationId);
   
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    console.warn('WebSocket not connected when trying to send chat message. Creating new connection...');
-    
-    // Try to create a new connection
-    try {
-      socket = connectWebSocket(message.userId as number);
-      
-      // Queue the message to be sent after connection is established
-      setTimeout(() => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          console.log('Sending delayed chat message after reconnection');
-          socket.send(JSON.stringify({
-            type: 'chat-message',
-            message
-          }));
-        } else {
-          console.error('Failed to send delayed chat message - socket still not ready');
-        }
-      }, 1000); // Wait for connection to establish
-      
-      return false;
-    } catch (error) {
-      console.error('Failed to reconnect WebSocket for sending message', error);
-      return false;
-    }
-  }
-  
-  return sendMessage({
+  // Create the standard message format
+  const formattedMessage: WebSocketMessage = {
     type: 'chat-message',
     message
-  });
+  };
+  
+  // Check if socket is ready
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    console.warn('WebSocket not connected when trying to send chat message');
+    
+    // Store in queue for later sending
+    messageQueue.push(formattedMessage);
+    
+    // Try to create a new connection if we have a user ID
+    if (message.userId) {
+      try {
+        connectWebSocket(message.userId as number);
+      } catch (error) {
+        console.error('Failed to connect WebSocket for sending message', error);
+      }
+    }
+    
+    return false;
+  }
+  
+  // Send using the standard function which handles errors
+  return sendMessage(formattedMessage);
 }
 
 export function registerMessageHandler(handler: MessageHandler) {

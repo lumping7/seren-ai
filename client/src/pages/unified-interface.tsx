@@ -119,8 +119,25 @@ export default function UnifiedInterface() {
     
     let isMounted = true;
     
-    // Initial connection
-    const ws = connectWebSocket(user.id);
+    // Initial connection - delay slightly to ensure user data is fully loaded
+    setTimeout(() => {
+      if (!isMounted) return; // Check if component is still mounted
+      
+      try {
+        // Connect to WebSocket with user ID
+        connectWebSocket(user.id);
+        
+        console.log("WebSocket connection established for user", user.id);
+      } catch (error) {
+        console.error("Error connecting to WebSocket:", error);
+        
+        toast({
+          title: "Connection Issue",
+          description: "Failed to establish real-time connection. Messages will be sent but responses may be delayed.",
+          variant: "destructive",
+        });
+      }
+    }, 500);
     
     // Register message handler
     const unregisterFn = registerMessageHandler((data) => {
@@ -203,23 +220,24 @@ export default function UnifiedInterface() {
     setIsLoadingResponse(true);
     
     try {
-      // Send via websocket
-      sendChatMessage({
-        type: 'chat-message',
-        message: userMessage,
-        model: selectedModel
-      });
+      // Send via websocket - make sure to use proper message format
+      // WebSocket helper expects an AIMessage, not a WebSocketMessage
+      const success = sendChatMessage(userMessage);
+      
+      if (!success) {
+        console.log("Message queued for delivery when connection is available");
+      }
     } catch (error) {
       console.error("Error sending message:", error);
       
-      // Show error
+      // Show error but don't stop loading state since we might still get a response
       toast({
-        title: 'Error',
-        description: 'Failed to send message. Please try again.',
-        variant: 'destructive',
+        title: 'Connection Issue',
+        description: 'Message sent but there may be a delay in receiving the response.',
+        variant: 'default',
       });
       
-      setIsLoadingResponse(false);
+      // Don't set isLoadingResponse to false as the message may still be processed
     }
   };
   
