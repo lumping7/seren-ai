@@ -8,12 +8,14 @@ import { AuthProvider } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
 import UnifiedInterface from "@/pages/unified-interface";
+import VirtualComputerPage from "@/pages/virtual-computer";
 import { ProtectedRoute } from "@/lib/protected-route";
 
 function Router() {
   return (
     <Switch>
       <ProtectedRoute path="/" component={UnifiedInterface} />
+      <ProtectedRoute path="/virtual-computer" component={VirtualComputerPage} />
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
