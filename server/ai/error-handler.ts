@@ -59,29 +59,52 @@ class ErrorHandler {
   /**
    * Handle an error and send an appropriate response
    */
-  handleError(error: Error | EnhancedError, req?: Request, res?: Response): void {
-    const enhancedError = error as EnhancedError;
+  handleError(error: Error | EnhancedError | unknown, req?: Request, res?: Response): void {
+    // Ensure we have an Error object
+    const normalizedError: EnhancedError = this.normalizeError(error);
     
     // Log the error
     console.error('[ErrorHandler]', {
-      message: error.message,
-      category: enhancedError.category || ErrorCategory.UNKNOWN,
-      details: enhancedError.details,
-      stack: error.stack
+      message: normalizedError.message,
+      category: normalizedError.category || ErrorCategory.UNKNOWN,
+      details: normalizedError.details,
+      stack: normalizedError.stack
     });
     
     // If response object is provided, send error response
     if (req && res) {
-      const statusCode = enhancedError.statusCode || 500;
+      const statusCode = normalizedError.statusCode || 500;
       
       res.status(statusCode).json({
         error: {
-          message: error.message,
-          category: enhancedError.category || ErrorCategory.UNKNOWN,
-          details: enhancedError.details,
+          message: normalizedError.message,
+          category: normalizedError.category || ErrorCategory.UNKNOWN,
+          details: normalizedError.details,
           request_id: req.headers['x-request-id'] || 'unknown'
         }
       });
+    }
+  }
+  
+  /**
+   * Normalize any error type to an EnhancedError
+   */
+  normalizeError(error: unknown): EnhancedError {
+    if (error instanceof Error) {
+      return error as EnhancedError;
+    } else if (typeof error === 'string') {
+      return this.createError(error);
+    } else if (error && typeof error === 'object') {
+      const errObj = error as any;
+      const message = errObj.message || 'Unknown error';
+      return this.createError(
+        message, 
+        errObj.category || ErrorCategory.UNKNOWN,
+        errObj,
+        errObj.statusCode || 500
+      );
+    } else {
+      return this.createError('Unknown error');
     }
   }
 }

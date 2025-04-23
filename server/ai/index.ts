@@ -108,12 +108,8 @@ async function startConversationHandler(req: express.Request, res: express.Respo
       conversationId,
       message: 'Conversation started successfully'
     });
-  } catch (error) {
-    errorHandler.handleError(
-      error instanceof Error ? error : new Error(String(error)),
-      req, 
-      res
-    );
+  } catch (error: unknown) {
+    errorHandler.handleError(error, req, res);
   }
 }
 
@@ -138,12 +134,8 @@ async function getConversationHandler(req: express.Request, res: express.Respons
     }
     
     return res.json(conversation);
-  } catch (error) {
-    errorHandler.handleError(
-      error instanceof Error ? error : new Error(String(error)),
-      req, 
-      res
-    );
+  } catch (error: unknown) {
+    errorHandler.handleError(error, req, res);
   }
 }
 
@@ -200,12 +192,8 @@ async function addConversationTurnHandler(req: express.Request, res: express.Res
       message: 'Turn added successfully',
       status: 'Not currently supported in this version'
     });
-  } catch (error) {
-    errorHandler.handleError(
-      error instanceof Error ? error : new Error(String(error)),
-      req, 
-      res
-    );
+  } catch (error: unknown) {
+    errorHandler.handleError(error, req, res);
   }
 }
 
@@ -265,7 +253,7 @@ aiRouter.post('/models/generate', async (req, res) => {
     });
     
     res.json(result);
-  } catch (error) {
+  } catch (error: unknown) {
     errorHandler.handleError(error, req, res);
   }
 });
@@ -287,7 +275,7 @@ aiRouter.post('/models/enhance', async (req, res) => {
     });
     
     res.json(result);
-  } catch (error) {
+  } catch (error: unknown) {
     errorHandler.handleError(error, req, res);
   }
 });
@@ -311,7 +299,7 @@ aiRouter.post('/models/debug', async (req, res) => {
     });
     
     res.json(result);
-  } catch (error) {
+  } catch (error: unknown) {
     errorHandler.handleError(error, req, res);
   }
 });
@@ -332,7 +320,7 @@ aiRouter.post('/models/explain', async (req, res) => {
     });
     
     res.json(result);
-  } catch (error) {
+  } catch (error: unknown) {
     errorHandler.handleError(error, req, res);
   }
 });
@@ -361,19 +349,19 @@ const openManusIntegration = new OpenManusIntegration(
       try {
         // Use the model parameter directly to determine what to use
         if (model === 'qwen2.5-7b-omni') {
-          return await generateCode(content, { primaryModel: ModelType.QWEN });
+          return await generateCode(content, { primaryModel: ModelType.QWEN_OMNI });
         } else if (model === 'olympiccoder-7b') {
-          return await generateCode(content, { primaryModel: ModelType.OLYMPIC });
+          return await generateCode(content, { primaryModel: ModelType.OLYMPIC_CODER });
         } else if (model === 'hybrid') {
           // For hybrid, combine the results of both models
-          const qwenResult = await generateCode(content, { primaryModel: ModelType.QWEN });
-          const olympicResult = await generateCode(content, { primaryModel: ModelType.OLYMPIC });
+          const qwenResult = await generateCode(content, { primaryModel: ModelType.QWEN_OMNI });
+          const olympicResult = await generateCode(content, { primaryModel: ModelType.OLYMPIC_CODER });
           
           // Return a combined result
           return `${qwenResult}\n\n--- Alternative Implementation ---\n\n${olympicResult}`;
         } else {
           // Default to Qwen
-          return await generateCode(content, { primaryModel: ModelType.QWEN });
+          return await generateCode(content, { primaryModel: ModelType.QWEN_OMNI });
         }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -421,7 +409,7 @@ aiRouter.post('/openmanus/project', async (req, res) => {
       projectId,
       message: 'Autonomous project created successfully'
     });
-  } catch (error) {
+  } catch (error: unknown) {
     errorHandler.handleError(error, req, res);
   }
 });
@@ -436,7 +424,7 @@ aiRouter.get('/openmanus/project/:id', async (req, res) => {
     
     const status = openManusIntegration.getProjectStatus(projectId);
     res.json(status);
-  } catch (error) {
+  } catch (error: unknown) {
     errorHandler.handleError(error, req, res);
   }
 });
@@ -445,7 +433,7 @@ aiRouter.get('/openmanus/projects', async (req, res) => {
   try {
     const projects = openManusIntegration.getAllProjects();
     res.json(projects);
-  } catch (error) {
+  } catch (error: unknown) {
     errorHandler.handleError(error, req, res);
   }
 });
@@ -460,7 +448,7 @@ aiRouter.get('/openmanus/project/:id/files', async (req, res) => {
     
     const files = openManusIntegration.getProjectFiles(projectId);
     res.json(files);
-  } catch (error) {
+  } catch (error: unknown) {
     errorHandler.handleError(error, req, res);
   }
 });
@@ -474,7 +462,7 @@ aiRouter.get('/openmanus/project/:id/files', async (req, res) => {
     // Initialize OpenManus integration
     await openManusIntegration.initialize();
     console.log(`[AI] OpenManus integration ${initialized ? 'successfully initialized' : 'failed to initialize'}`);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[AI] Error initializing model processes:', error);
   }
 })();
