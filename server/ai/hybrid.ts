@@ -1,8 +1,10 @@
 /**
- * Hybrid AI Engine
+ * Seren Unified AI Dev Team
  * 
- * Manages the collaboration between multiple AI models (Llama3 and Gemma3)
- * to deliver superior results through various collaboration strategies.
+ * Manages the seamless collaboration between Qwen2.5-7b-omni and OlympicCoder-7B
+ * to create a hyperintelligent AI dev team that functions as a unified entity.
+ * This goes beyond simple model collaboration to create a truly autonomous
+ * software development system that can design, implement, test, and optimize code.
  */
 
 import { Request, Response } from 'express';
@@ -27,8 +29,8 @@ const hybridInputSchema = z.object({
     presencePenalty: z.number().min(-2).max(2).optional().default(0),
     frequencyPenalty: z.number().min(-2).max(2).optional().default(0),
     stopSequences: z.array(z.string()).optional(),
-    primaryModel: z.enum(['llama3', 'gemma3']).optional(),
-    modelRatio: z.number().min(0).max(1).optional().default(0.5), // 0.0 = full Llama, 1.0 = full Gemma
+    primaryModel: z.enum(['qwen', 'olympic']).optional(),
+    modelRatio: z.number().min(0).max(1).optional().default(0.5), // 0.0 = full Qwen, 1.0 = full Olympic
   }).optional().default({}),
   conversationId: z.string().optional(),
   systemPrompt: z.string().optional()
@@ -43,8 +45,8 @@ export interface HybridResponse {
   mode: CollaborationMode;
   generated_text: string;
   model_contributions: {
-    llama3: number; // contribution percentage
-    gemma3: number; // contribution percentage
+    qwen: number; // contribution percentage from Qwen2.5-7b-omni
+    olympic: number; // contribution percentage from OlympicCoder-7B
   };
   metadata: {
     processing_time: number;
@@ -62,19 +64,23 @@ const DEFAULT_SYSTEM_PROMPT =
 
 // Specific model reasoning focuses and strengths
 const MODEL_STRENGTHS = {
-  llama3: [
+  qwen: [
     'logical reasoning',
     'code generation',
     'structured data analysis',
     'technical problem-solving',
-    'scientific knowledge'
+    'scientific knowledge',
+    'knowledge reasoning',
+    'algorithm design'
   ],
-  gemma3: [
-    'common sense reasoning',
-    'creative writing',
-    'nuanced understanding',
-    'ethical considerations',
-    'empathetic responses'
+  olympic: [
+    'advanced coding',
+    'software engineering',
+    'system architecture',
+    'debugging expertise',
+    'optimization techniques',
+    'pattern recognition',
+    'development workflows'
   ]
 };
 
@@ -450,94 +456,94 @@ function analyzePrompt(prompt: string) {
   
   // Define categories for analysis
   const categories = {
-    technical: 0,
-    creative: 0,
-    analytical: 0,
-    emotional: 0,
-    factual: 0
+    coding: 0,
+    architecture: 0,
+    reasoning: 0,
+    knowledge: 0,
+    optimization: 0
   };
   
-  // Technical content
+  // Coding tasks
   if (promptLower.includes('code') || 
       promptLower.includes('function') || 
       promptLower.includes('program') ||
-      promptLower.includes('algorithm') ||
-      promptLower.includes('technical')) {
-    categories.technical += 2;
-    categories.analytical += 1;
+      promptLower.includes('implement') ||
+      promptLower.includes('develop')) {
+    categories.coding += 2;
+    categories.architecture += 1;
   }
   
-  // Creative content
-  if (promptLower.includes('create') || 
-      promptLower.includes('write') || 
-      promptLower.includes('story') ||
-      promptLower.includes('poem') ||
-      promptLower.includes('creative')) {
-    categories.creative += 2;
-    categories.emotional += 1;
+  // Architecture tasks
+  if (promptLower.includes('design') || 
+      promptLower.includes('architect') || 
+      promptLower.includes('structure') ||
+      promptLower.includes('system') ||
+      promptLower.includes('framework')) {
+    categories.architecture += 2;
+    categories.optimization += 1;
   }
   
-  // Analytical content
+  // Reasoning tasks
   if (promptLower.includes('analyze') || 
-      promptLower.includes('compare') || 
+      promptLower.includes('reason') || 
       promptLower.includes('evaluate') ||
       promptLower.includes('assess') ||
-      promptLower.includes('review')) {
-    categories.analytical += 2;
-    categories.factual += 1;
+      promptLower.includes('plan')) {
+    categories.reasoning += 2;
+    categories.knowledge += 1;
   }
   
-  // Emotional content
-  if (promptLower.includes('feel') || 
-      promptLower.includes('emotion') || 
-      promptLower.includes('experience') ||
-      promptLower.includes('personal') ||
-      promptLower.includes('human')) {
-    categories.emotional += 2;
-    categories.creative += 1;
+  // Knowledge tasks
+  if (promptLower.includes('explain') || 
+      promptLower.includes('knowledge') || 
+      promptLower.includes('research') ||
+      promptLower.includes('information') ||
+      promptLower.includes('concept')) {
+    categories.knowledge += 2;
+    categories.reasoning += 1;
   }
   
-  // Factual content
-  if (promptLower.includes('fact') || 
-      promptLower.includes('information') || 
-      promptLower.includes('explain') ||
-      promptLower.includes('how') ||
-      promptLower.includes('what')) {
-    categories.factual += 2;
-    categories.analytical += 1;
+  // Optimization tasks
+  if (promptLower.includes('optimize') || 
+      promptLower.includes('improve') || 
+      promptLower.includes('enhance') ||
+      promptLower.includes('refactor') ||
+      promptLower.includes('debug')) {
+    categories.optimization += 2;
+    categories.coding += 1;
   }
   
   // Ensure at least some values in categories
   if (Object.values(categories).reduce((sum, val) => sum + val, 0) === 0) {
-    categories.analytical = 1;
-    categories.factual = 1;
+    categories.coding = 1;
+    categories.reasoning = 1;
   }
   
   // Calculate overall weights
-  // Llama3 is stronger at technical, analytical, factual tasks
-  // Gemma3 is stronger at creative, emotional tasks
-  const llamaStrengths = categories.technical + categories.analytical + categories.factual;
-  const gemmaStrengths = categories.creative + categories.emotional;
+  // Qwen is stronger at reasoning, knowledge, general coding
+  // Olympic is stronger at software architecture, optimization, specialized coding
+  const qwenStrengths = categories.reasoning + categories.knowledge + (categories.coding * 0.5);
+  const olympicStrengths = categories.architecture + categories.optimization + (categories.coding * 0.5);
   
   // Calculate normalized weights
-  const total = llamaStrengths + gemmaStrengths;
-  const llamaWeight = llamaStrengths / total;
-  const gemmaWeight = gemmaStrengths / total;
+  const total = qwenStrengths + olympicStrengths;
+  const qwenWeight = qwenStrengths / total;
+  const olympicWeight = olympicStrengths / total;
   
   // Determine the best combination strategy
   let combinationStrategy = 'integrated';
-  if (llamaWeight > 0.7) {
-    combinationStrategy = 'llama-led';
-  } else if (gemmaWeight > 0.7) {
-    combinationStrategy = 'gemma-led';
-  } else if (Math.abs(llamaWeight - gemmaWeight) < 0.2) {
+  if (qwenWeight > 0.7) {
+    combinationStrategy = 'qwen-led';
+  } else if (olympicWeight > 0.7) {
+    combinationStrategy = 'olympic-led';
+  } else if (Math.abs(qwenWeight - olympicWeight) < 0.2) {
     combinationStrategy = 'balanced';
   }
   
   return {
     categories,
-    llamaWeight,
-    gemmaWeight,
+    qwenWeight,
+    olympicWeight,
     combinationStrategy
   };
 }
