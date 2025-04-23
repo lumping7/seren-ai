@@ -95,7 +95,7 @@ export class ConversationManager {
     topic: string, 
     userPrompt: string,
     mode: ConversationMode = 'collaborative',
-    initialModel: 'llama3' | 'gemma3' = 'llama3'
+    initialModel: 'qwen' | 'olympic' = 'qwen'
   ): Promise<string> {
     try {
       // Generate a unique ID for the conversation
@@ -135,7 +135,7 @@ export class ConversationManager {
    */
   private async addTurn(
     conversationId: string,
-    model: 'llama3' | 'gemma3',
+    model: 'qwen' | 'olympic',
     userPrompt: string
   ): Promise<void> {
     try {
@@ -152,34 +152,34 @@ export class ConversationManager {
       // Generate response based on the model and conversation mode
       let content = '';
       
-      if (model === 'llama3') {
+      if (model === 'qwen') {
         switch (conversation.mode) {
           case 'debate':
-            content = this.simulateLlama3DebateResponse(conversation.topic, conversation);
+            content = this.simulateQwenDebateResponse(conversation.topic, conversation);
             break;
           case 'collaborative':
-            content = this.simulateLlama3CollaborativeResponse(conversation.topic, conversation);
+            content = this.simulateQwenCollaborativeResponse(conversation.topic, conversation);
             break;
           case 'critical':
-            content = this.simulateLlama3CriticalResponse(conversation.topic, conversation);
+            content = this.simulateQwenCriticalResponse(conversation.topic, conversation);
             break;
           case 'brainstorming':
-            content = this.simulateLlama3BrainstormingResponse(conversation.topic, conversation);
+            content = this.simulateQwenBrainstormingResponse(conversation.topic, conversation);
             break;
         }
       } else {
         switch (conversation.mode) {
           case 'debate':
-            content = this.simulateGemma3DebateResponse(conversation.topic, conversation);
+            content = this.simulateOlympicDebateResponse(conversation.topic, conversation);
             break;
           case 'collaborative':
-            content = this.simulateGemma3CollaborativeResponse(conversation.topic, conversation);
+            content = this.simulateOlympicCollaborativeResponse(conversation.topic, conversation);
             break;
           case 'critical':
-            content = this.simulateGemma3CriticalResponse(conversation.topic, conversation);
+            content = this.simulateOlympicCriticalResponse(conversation.topic, conversation);
             break;
           case 'brainstorming':
-            content = this.simulateGemma3BrainstormingResponse(conversation.topic, conversation);
+            content = this.simulateOlympicBrainstormingResponse(conversation.topic, conversation);
             break;
         }
       }
@@ -205,7 +205,7 @@ export class ConversationManager {
       // Check if we need to continue the conversation
       if (conversation.turns.length < this.maxTurns[conversation.mode]) {
         // Add the next turn from the other model
-        const nextModel = model === 'llama3' ? 'gemma3' : 'llama3';
+        const nextModel = model === 'qwen' ? 'olympic' : 'qwen';
         
         // Create a prompt for the next model
         const nextPrompt = this.createModelPrompt(conversation, nextModel, conversation.mode);
@@ -242,7 +242,7 @@ export class ConversationManager {
           topic: conversation.topic,
           mode: conversation.mode,
           turnCount: conversation.turns.length,
-          models: ['llama3', 'gemma3']
+          models: ['qwen', 'olympic']
         }
       });
       
@@ -280,7 +280,7 @@ export class ConversationManager {
    */
   private createModelPrompt(
     conversation: ModelConversation,
-    nextModel: 'llama3' | 'gemma3',
+    nextModel: 'qwen' | 'olympic',
     mode: ConversationMode
   ): string {
     // Get the previous turn
@@ -460,42 +460,42 @@ export class ConversationManager {
   }
   
   // Simulated response methods for each model and mode
-  private simulateLlama3DebateResponse(topic: string, conversation: ModelConversation): string {
+  private simulateQwenDebateResponse(topic: string, conversation: ModelConversation): string {
     // Using a simplified implementation to avoid complex template literals
     return "When addressing this topic, I believe we should focus on measurable outcomes and evidence-based approaches. Quantitative analysis gives us objective metrics to evaluate success and identify areas for improvement. Let me outline several analytical frameworks we could apply...";
   }
   
-  private simulateLlama3CollaborativeResponse(topic: string, conversation: ModelConversation): string {
+  private simulateQwenCollaborativeResponse(topic: string, conversation: ModelConversation): string {
     // Using a simplified implementation to avoid complex template literals
     return "I appreciate your perspective on the human experience aspects. To complement that, let me propose a technical architecture that would support those goals while ensuring scalability and performance. Here's how we could structure the system...";
   }
   
-  private simulateLlama3CriticalResponse(topic: string, conversation: ModelConversation): string {
+  private simulateQwenCriticalResponse(topic: string, conversation: ModelConversation): string {
     // Using a simplified implementation to avoid complex template literals
     return "Upon critical analysis, I've identified several technical limitations that need to be addressed. The current approach has performance bottlenecks, potential security vulnerabilities, and lacks proper error handling. Let me outline these issues in detail...";
   }
   
-  private simulateLlama3BrainstormingResponse(topic: string, conversation: ModelConversation): string {
+  private simulateQwenBrainstormingResponse(topic: string, conversation: ModelConversation): string {
     // Using a simplified implementation to avoid complex template literals
     return "I've been thinking about innovative technical approaches to this problem. We could implement a distributed processing architecture with dynamic scaling, an advanced caching strategy with content-aware invalidation, or perhaps a reactive data processing pipeline for real-time transformations...";
   }
   
-  private simulateGemma3DebateResponse(topic: string, conversation: ModelConversation): string {
+  private simulateOlympicDebateResponse(topic: string, conversation: ModelConversation): string {
     // Using a simplified implementation to avoid complex template literals
     return "While quantitative metrics are valuable, I believe we need to approach this through a more holistic and human-centered lens. Purely analytical frameworks often miss critical human factors and ethical implications. Let me suggest a balanced approach that honors both quantitative insights and qualitative human experiences...";
   }
   
-  private simulateGemma3CollaborativeResponse(topic: string, conversation: ModelConversation): string {
+  private simulateOlympicCollaborativeResponse(topic: string, conversation: ModelConversation): string {
     // Using a simplified implementation to avoid complex template literals
     return "I think we should center our design around the human experience while ensuring technical excellence. I envision a system that feels intuitive and responsive to people's needs, with thoughtful user journey mapping, inclusive design principles, and a clear ethical framework. How does that align with your technical architecture?";
   }
   
-  private simulateGemma3CriticalResponse(topic: string, conversation: ModelConversation): string {
+  private simulateOlympicCriticalResponse(topic: string, conversation: ModelConversation): string {
     // Using a simplified implementation to avoid complex template literals
     return "I've identified several aspects that deserve careful attention from a human-centered perspective. The current approach assumes technical familiarity that many users won't have, contains unnecessary complexity that increases cognitive load, and lacks clear recovery paths for error states. Let me elaborate on these concerns...";
   }
   
-  private simulateGemma3BrainstormingResponse(topic: string, conversation: ModelConversation): string {
+  private simulateOlympicBrainstormingResponse(topic: string, conversation: ModelConversation): string {
     // Using a simplified implementation to avoid complex template literals
     return "I've been exploring narrative-based approaches to this challenge. What if we created personalized user journeys with adaptive interfaces that respond to emotional context? We could implement progressive disclosure patterns, contextual help systems, and meaningful transitions that maintain user context throughout the experience...";
   }
