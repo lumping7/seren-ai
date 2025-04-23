@@ -360,7 +360,7 @@ const openManusIntegration = new OpenManusIntegration(
         }
       } catch (err) {
         console.error(`[OpenManus] Error executing task with model ${model}:`, err);
-        return `Error processing with ${model}. Falling back to simulated response.\n\n\`\`\`\nfunction simulatedResponse() {\n  console.log("This is a fallback response.");\n}\n\`\`\``;
+        throw new Error(`Failed to execute task with model ${model}: ${err.message || 'Unknown error'}`);
       }
     }
   },

@@ -807,25 +807,12 @@ class IntegratedAgentSystem:
         # Otherwise return the primary result
         return primary_result
     
-    def _fallback_text_generation(self, 
-                                 prompt: str, 
-                                 model_type: str, 
-                                 options: Dict[str, Any] = None) -> str:
-        """Fallback text generation when models are not available"""
-        options = options or {}
-        role = options.get("role", "assistant")
-        
-        # Return a simple response based on the role
-        if role == "architect" or role == AgentRole.PLANNER:
-            return "I'll help you plan this software project. [Fallback response]"
-        elif role == "builder" or role == AgentRole.CODER:
-            return "Here's some example code to get started: [Fallback code]"
-        elif role == "tester" or role == AgentRole.TESTER:
-            return "I've analyzed the code and found the following test cases: [Fallback tests]"
-        elif role == "reviewer" or role == AgentRole.REVIEWER:
-            return "My review of the code suggests the following improvements: [Fallback review]"
-        else:
-            return f"I'll help you with your request using {model_type}. [Fallback response]"
+    def _handle_model_unavailability(self, 
+                              model_type: str, 
+                              operation: str) -> None:
+        """Handle the case when a model is unavailable"""
+        logger.error(f"Model {model_type} unavailable for operation: {operation}")
+        raise RuntimeError(f"Model {model_type} is currently unavailable. Please ensure all required models are properly initialized.")
     
     def create_software_project(self, 
                               project_name: str,
@@ -964,8 +951,13 @@ class IntegratedAgentSystem:
                 options={"task": task.to_dict()}
             )
             
-            # For demonstration, just simulate success most of the time
-            # In a real system, we would evaluate the result
+            # Validate the result
+            if not result or isinstance(result, str) and not result.strip():
+                logger.warning(f"Empty or invalid result for task {task.task_id}")
+                return False, "Empty or invalid result received from model"
+                
+            # Log success
+            logger.info(f"Successfully executed task {task.task_id} with agent {agent.agent_id}")
             return True, result
             
         except Exception as e:
@@ -1138,7 +1130,8 @@ class ModelServerInterface:
     def process_message(self, message: Dict[str, Any]) -> Any:
         """Process a message using the model server"""
         if not self.initialized:
-            self.initialize()
+            if not self.initialize():
+                raise RuntimeError("Failed to initialize model server interface")
         
         model_type = message.get("model", "hybrid")
         message_type = message.get("type", "request")
@@ -1147,26 +1140,17 @@ class ModelServerInterface:
         # Log the request
         logger.info(f"Processing {message_type} for {model_type}")
         
-        # In a real implementation, this would send the message to 
-        # the appropriate model server and wait for a response
+        # Validate the model server is available
+        if model_type not in self.model_servers:
+            raise ValueError(f"Unsupported model type: {model_type}")
+            
+        if self.model_servers[model_type] is None:
+            logger.error(f"Model server for {model_type} is not initialized")
+            raise RuntimeError(f"Model server for {model_type} is not available")
         
-        # For now, just return a fallback response
-        if message_type == "request":
-            prompt = content.get("prompt", "")
-            
-            # Generate a response based on the role
-            role = message.get("role", "assistant")
-            
-            if "code" in prompt.lower() or role == "builder" or role == "coder":
-                return "```python\ndef hello_world():\n    print('Hello, World!')\n\nhello_world()\n```"
-            elif "architecture" in prompt.lower() or role == "architect" or role == "planner":
-                return "# Architecture Design\n\n1. Frontend: React\n2. Backend: Flask\n3. Database: PostgreSQL\n\n## API Endpoints\n\n- GET /api/items\n- POST /api/items\n- GET /api/items/:id"
-            elif "test" in prompt.lower() or role == "tester":
-                return "```python\nimport unittest\n\nclass TestHello(unittest.TestCase):\n    def test_hello(self):\n        self.assertEqual(hello_world(), None)\n```"
-            else:
-                return "I'll help you with that task. Here's a response based on your requirements..."
-        else:
-            return {"status": "ok", "message": "Message processed"}
+        # In a production system, this would send the message to the appropriate model server
+        # and return the actual model response
+        raise NotImplementedError("Direct model communication not implemented yet")
     
     def shutdown(self):
         """Shut down the interface"""
@@ -1178,47 +1162,35 @@ class ModelServerInterface:
 # =============================================================================
 
 def main():
-    """Main function for testing the agent system"""
+    """Main function for initializing the agent system in production"""
     logger.info("Starting Agent System with OpenManus architecture")
     
-    # Create the model server interface
-    model_server = ModelServerInterface()
-    model_server.initialize()
-    
-    # Create the integrated agent system
-    agent_system = IntegratedAgentSystem(model_server)
-    
-    # Example: Create a software project
-    project_id = agent_system.create_software_project(
-        project_name="Todo List App",
-        requirements="""
-        Create a web-based todo list application with the following features:
-        - User registration and login
-        - Ability to create, edit, and delete tasks
-        - Mark tasks as complete
-        - Filter tasks by status
-        - Responsive design for mobile and desktop
-        """,
-        language="Python",
-        framework="Flask"
-    )
-    
-    # Run continuous execution for a few steps
-    execution_results = agent_system.run_continuous_execution(max_steps=5)
-    
-    # Check the project status
-    project_status = agent_system.get_project_status(project_id)
-    
-    # Print results
-    logger.info(f"Project ID: {project_id}")
-    logger.info(f"Project Status: {project_status['status']}")
-    logger.info(f"Progress: {project_status['progress']}%")
-    logger.info(f"Execution Steps: {execution_results['steps_executed']}")
-    logger.info(f"Tasks Completed: {execution_results['tasks_completed']}")
-    
-    # Clean up
-    model_server.shutdown()
-    
+    try:
+        # Create the model server interface
+        model_server = ModelServerInterface()
+        if not model_server.initialize():
+            logger.error("Failed to initialize model server interface")
+            return 1
+        
+        # Create the integrated agent system
+        agent_system = IntegratedAgentSystem(model_server)
+        logger.info("Agent system successfully initialized")
+        
+        # Keep the system running
+        while True:
+            time.sleep(60)  # Check status periodically
+            logger.info("Agent system heartbeat check")
+            
+    except KeyboardInterrupt:
+        logger.info("Agent system shutdown requested")
+    except Exception as e:
+        logger.error(f"Unexpected error in agent system: {e}")
+        logger.error(traceback.format_exc())
+        return 1
+    finally:
+        if 'model_server' in locals():
+            model_server.shutdown()
+        
     return 0
 
 if __name__ == "__main__":
