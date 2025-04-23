@@ -20,7 +20,8 @@ import {
   Moon,
   Computer,
   ZapIcon,
-  HelpCircle
+  HelpCircle,
+  LogOut
 } from 'lucide-react';
 
 import {
@@ -784,12 +785,20 @@ export default function UnifiedInterface() {
                 <Button 
                   variant="link" 
                   size="sm" 
-                  className="p-0 h-auto text-xs text-muted-foreground"
+                  className="p-0 h-auto text-xs text-muted-foreground hidden sm:block"
                   onClick={() => logoutMutation.mutate()}
                 >
                   Sign out
                 </Button>
               </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="sm:hidden h-8 w-8"
+                onClick={() => logoutMutation.mutate()}
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         </div>
@@ -800,17 +809,17 @@ export default function UnifiedInterface() {
         <div className="container mx-auto h-full flex flex-col">
           {/* Chat Messages */}
           <ScrollArea 
-            className="flex-1 p-4" 
+            className="flex-1 p-2 sm:p-4" 
             ref={chatContainerRef}
           >
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {chatMessages.map((message, index) => (
                 <div 
                   key={index}
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div 
-                    className={`max-w-[80%] rounded-lg px-4 py-3 ${
+                    className={`max-w-[90%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 ${
                       message.role === 'user' 
                         ? 'bg-primary text-primary-foreground' 
                         : 'bg-muted'
@@ -820,11 +829,19 @@ export default function UnifiedInterface() {
                     
                     {message.role === 'assistant' && message.model && (
                       <div className="mt-2 text-xs text-right text-muted-foreground">
-                        {message.model === 'qwen' 
-                          ? 'Qwen2.5-7b-omni' 
-                          : message.model === 'olympic' 
-                            ? 'OlympicCoder-7B' 
-                            : 'Hybrid'}
+                        {isMobile ? 
+                          (message.model === 'qwen' 
+                            ? 'Qwen' 
+                            : message.model === 'olympic' 
+                              ? 'Olympic' 
+                              : 'Hybrid')
+                          : 
+                          (message.model === 'qwen' 
+                            ? 'Qwen2.5-7b-omni' 
+                            : message.model === 'olympic' 
+                              ? 'OlympicCoder-7B' 
+                              : 'Hybrid')
+                        }
                       </div>
                     )}
                   </div>
@@ -833,7 +850,7 @@ export default function UnifiedInterface() {
               
               {isLoadingResponse && (
                 <div className="flex justify-start">
-                  <div className="max-w-[80%] rounded-lg px-4 py-3 bg-muted">
+                  <div className="max-w-[90%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 bg-muted">
                     <div className="flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       <span>Seren is thinking...</span>
@@ -846,27 +863,27 @@ export default function UnifiedInterface() {
           
           {/* Project Creation Panel */}
           {showProjectPanel && (
-            <div className="border-t p-4 bg-card">
+            <div className="border-t p-3 sm:p-4 bg-card">
               <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle>Create New Project</CardTitle>
+                <CardHeader className="pb-2 px-3 sm:px-6">
+                  <CardTitle className="text-lg sm:text-xl">Create New Project</CardTitle>
                   <CardDescription>
                     I'll generate a complete software project based on your requirements
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-3 sm:px-6">
                   <div className="space-y-2">
                     <p className="text-sm font-medium">Your project description:</p>
-                    <div className="p-3 bg-muted rounded-md">
+                    <div className="p-2 sm:p-3 bg-muted rounded-md text-sm sm:text-base">
                       {projectPrompt}
                     </div>
                   </div>
                 </CardContent>
-                <CardFooter className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setShowProjectPanel(false)}>
+                <CardFooter className="flex justify-end gap-2 px-3 sm:px-6 pt-2">
+                  <Button variant="outline" size={isMobile ? "sm" : "default"} onClick={() => setShowProjectPanel(false)}>
                     Cancel
                   </Button>
-                  <Button onClick={handleProjectCreation}>
+                  <Button size={isMobile ? "sm" : "default"} onClick={handleProjectCreation}>
                     Create Project
                   </Button>
                 </CardFooter>
@@ -875,7 +892,7 @@ export default function UnifiedInterface() {
           )}
           
           {/* Chat Input */}
-          <div className="p-4 border-t">
+          <div className="p-2 sm:p-4 border-t">
             <form 
               className="flex gap-2"
               onSubmit={(e) => {
@@ -884,7 +901,7 @@ export default function UnifiedInterface() {
               }}
             >
               <Textarea
-                placeholder="Send a message to Seren AI... (Try 'Create a TODO list app with React')"
+                placeholder={isMobile ? "Message Seren AI..." : "Send a message to Seren AI... (Try 'Create a TODO list app with React')"}
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -893,26 +910,26 @@ export default function UnifiedInterface() {
                     sendMessage();
                   }
                 }}
-                className="min-h-[60px] flex-1 resize-none"
+                className="min-h-[50px] sm:min-h-[60px] flex-1 resize-none text-sm sm:text-base"
                 disabled={isLoadingResponse}
               />
               <Button 
                 type="submit"
                 size="icon" 
-                className="h-[60px] w-[60px]" 
+                className="h-[50px] w-[50px] sm:h-[60px] sm:w-[60px]" 
                 disabled={isLoadingResponse || !userInput.trim()}
               >
                 {isLoadingResponse ? (
-                  <Loader2 className="h-6 w-6 animate-spin" />
+                  <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin" />
                 ) : (
-                  <Send className="h-6 w-6" />
+                  <Send className="h-5 w-5 sm:h-6 sm:w-6" />
                 )}
               </Button>
             </form>
             <div className="mt-2 text-xs text-center text-muted-foreground">
-              <p>
+              <p className="line-clamp-2 sm:line-clamp-none">
                 Seren is designed to assist with software development, answer questions, and create projects.
-                Ask me to create software, answer questions, or explain concepts!
+                {!isMobile && " Ask me to create software, answer questions, or explain concepts!"}
               </p>
             </div>
           </div>
