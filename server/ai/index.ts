@@ -361,19 +361,19 @@ const openManusIntegration = new OpenManusIntegration(
       try {
         // Use the model parameter directly to determine what to use
         if (model === 'qwen2.5-7b-omni') {
-          return await generateCode(content, { primaryModel: 'qwen2.5-7b-omni' as any });
+          return await generateCode(content, { primaryModel: ModelType.QWEN });
         } else if (model === 'olympiccoder-7b') {
-          return await generateCode(content, { primaryModel: 'olympiccoder-7b' as any });
+          return await generateCode(content, { primaryModel: ModelType.OLYMPIC });
         } else if (model === 'hybrid') {
           // For hybrid, combine the results of both models
-          const qwenResult = await generateCode(content, { primaryModel: 'qwen2.5-7b-omni' as any });
-          const olympicResult = await generateCode(content, { primaryModel: 'olympiccoder-7b' as any });
+          const qwenResult = await generateCode(content, { primaryModel: ModelType.QWEN });
+          const olympicResult = await generateCode(content, { primaryModel: ModelType.OLYMPIC });
           
           // Return a combined result
           return `${qwenResult}\n\n--- Alternative Implementation ---\n\n${olympicResult}`;
         } else {
           // Default to Qwen
-          return await generateCode(content, { primaryModel: 'qwen2.5-7b-omni' as any });
+          return await generateCode(content, { primaryModel: ModelType.QWEN });
         }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
