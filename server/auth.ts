@@ -10,7 +10,18 @@ import { User } from "@shared/schema";
 // Configure global Express types
 declare global {
   namespace Express {
-    interface User extends User {}
+    // Extend the Express User interface with properties from our schema
+    interface User {
+      id: number;
+      username: string;
+      email: string | null;
+      displayName: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+      lastLoginAt: Date | null;
+      isAdmin: boolean | null;
+      preferences: any;
+    }
   }
 }
 

@@ -15,6 +15,44 @@ type MessageHandler = (message: WebSocketMessage) => void;
 const messageHandlers: MessageHandler[] = [];
 
 export function connectWebSocket(userId?: number): WebSocket {
+  // VDS COMPATIBILITY MODE: Check if we should use WebSockets at all or prefer HTTP
+  // To ensure maximum compatibility with VDS environments, we can disable WebSockets
+  const ENABLE_WEBSOCKETS = false; // Set to false for VDS deployment
+  
+  // If WebSockets are disabled, return a dummy socket that triggers fallback
+  if (!ENABLE_WEBSOCKETS) {
+    console.log("WebSockets are disabled for VDS compatibility. Using HTTP-only mode.");
+    // Return a proxy that will force all operations to fail gracefully
+    // This will cause the fallback to REST API to be used
+    if (!socket) {
+      socket = {
+        readyState: WebSocket.CLOSED,
+        send: () => { throw new Error("WebSockets disabled"); },
+        close: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => true,
+        onopen: null,
+        onclose: null,
+        onmessage: null,
+        onerror: null,
+        // Add missing WebSocket properties with dummy values
+        CONNECTING: WebSocket.CONNECTING,
+        OPEN: WebSocket.OPEN,
+        CLOSING: WebSocket.CLOSING,
+        CLOSED: WebSocket.CLOSED,
+        url: '',
+        protocol: '',
+        extensions: '',
+        bufferedAmount: 0,
+        binaryType: 'blob',
+      } as any;
+    }
+    // Process any queued messages via the REST API immediately
+    processMessageQueue();
+    return socket;
+  }
+  
   // If socket is already open, return it
   if (socket && socket.readyState === WebSocket.OPEN) {
     console.log("Reusing existing WebSocket connection");

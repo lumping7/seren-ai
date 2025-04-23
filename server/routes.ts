@@ -88,12 +88,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Save user message to database
+      const user = req.user as Express.User;
       const savedMessage = await storage.createMessage({
         conversationId: message.conversationId,
         role: 'user',
         content: message.content,
         model: message.model || 'hybrid',
-        userId: req.user.id,
+        userId: user.id,
         metadata: message.metadata || {}
       });
       
@@ -115,7 +116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           role: 'assistant',
           content: aiResponseText,
           model: modelType,
-          userId: req.user.id,
+          userId: user.id,
           metadata: { 
             modelType,
             generatedVia: "http"
@@ -136,7 +137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           role: 'assistant',
           content: `I'm sorry, but there was an error processing your message: ${aiError.message || "Unknown error"}`,
           model: message.model || 'hybrid',
-          userId: req.user.id,
+          userId: user.id,
           metadata: { error: aiError.message || "Unknown error", fallback: true }
         });
         
@@ -184,7 +185,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Setting value is required" });
       }
       
-      const setting = await storage.updateSetting(key, value, req.user.id);
+      const user = req.user as Express.User;
+      const setting = await storage.updateSetting(key, value, user.id);
       res.json(setting);
     } catch (error) {
       res.status(500).json({ message: "Failed to update setting" });
