@@ -256,15 +256,84 @@ async function processMessageQueue() {
   let retryCount = 0;
   const maxRetryCount = 3;
   
+  // Since we're running in VDS compatibility mode, we should process
+  // all messages via REST API first and only try WebSocket as fallback
   while (messageQueue.length > 0 && isProcessing) {
     const message = messageQueue[0]; // Peek at the first message
     
-    // Try WebSocket first
-    if (socket && socket.readyState === WebSocket.OPEN) {
+    // Try to send chat messages via REST API first (VDS compatibility mode)
+    if (message.type === 'chat-message' && message.message) {
       try {
+        console.log("Processing queued message via HTTP REST API");
+        // Use REST API as primary method
+        const response = await apiRequest("POST", "/api/chat", {
+          message: message.message
+        });
+        
+        // Handle response
+        if (response.ok) {
+          const data = await response.json();
+          messageQueue.shift(); // Remove from queue
+          retryCount = 0;
+          
+          // Manually dispatch response to handlers if successful
+          if (data.aiResponse) {
+            messageHandlers.forEach(handler => {
+              try {
+                // Handle user message first
+                handler({
+                  type: 'new-message',
+                  message: data.userMessage
+                });
+                
+                // Then handle AI response
+                handler({
+                  type: 'new-message',
+                  message: data.aiResponse
+                });
+              } catch (handlerError) {
+                console.error("Error in REST API handler:", handlerError);
+              }
+            });
+            
+            // Log success
+            console.log("Successfully processed message via HTTP");
+          }
+        } else {
+          console.error("HTTP API error:", await response.text());
+          retryCount++;
+          
+          if (retryCount >= maxRetryCount) {
+            console.error("Max retries reached for HTTP API, discarding message");
+            messageQueue.shift();
+            retryCount = 0;
+          } else {
+            console.log(`HTTP request failed, will retry (${retryCount}/${maxRetryCount})`);
+            isProcessing = false;
+          }
+        }
+      } catch (error) {
+        console.error("Error sending message via REST API:", error);
+        retryCount++;
+        
+        if (retryCount >= maxRetryCount) {
+          console.error("Max retries reached, discarding message");
+          messageQueue.shift();
+          retryCount = 0;
+        } else {
+          console.log(`HTTP request error, will retry (${retryCount}/${maxRetryCount})`);
+          isProcessing = false;
+        }
+      }
+    } 
+    // Try WebSocket as fallback for chat messages (if in development)
+    else if (socket && socket.readyState === WebSocket.OPEN && message.type === 'chat-message') {
+      try {
+        console.log("Trying WebSocket as fallback");
         socket.send(JSON.stringify(message));
         messageQueue.shift(); // Remove from queue if successful
         retryCount = 0;
+        console.log("Successfully sent message via WebSocket fallback");
       } catch (error) {
         console.error("Error sending queued message via WebSocket:", error);
         retryCount++;
@@ -280,62 +349,42 @@ async function processMessageQueue() {
         }
       }
     } 
-    // If WebSocket is not available, try REST API fallback for chat messages
-    else if (message.type === 'chat-message' && message.message) {
-      try {
-        // Use REST API as fallback
-        const response = await apiRequest("POST", "/api/chat", {
-          message: message.message
-        });
-        
-        // Handle response
-        if (response.ok) {
-          const data = await response.json();
-          messageQueue.shift(); // Remove from queue
-          
-          // Manually dispatch response to handlers if successful
-          if (data.aiResponse) {
-            messageHandlers.forEach(handler => {
-              try {
-                handler({
-                  type: 'new-message',
-                  message: data.aiResponse
-                });
-              } catch (handlerError) {
-                console.error("Error in REST API fallback message handler:", handlerError);
-              }
-            });
-          }
-        } else {
+    // For non-chat messages, try WebSocket only
+    else if (message.type !== 'chat-message') {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        try {
+          socket.send(JSON.stringify(message));
+          messageQueue.shift();
+          retryCount = 0;
+        } catch (error) {
+          console.error("Error sending non-chat message:", error);
           retryCount++;
+          
           if (retryCount >= maxRetryCount) {
             messageQueue.shift();
             retryCount = 0;
+          } else {
+            isProcessing = false;
           }
-          isProcessing = false;
         }
-      } catch (error) {
-        console.error("Error sending message via REST API fallback:", error);
-        retryCount++;
-        
-        if (retryCount >= maxRetryCount) {
-          messageQueue.shift();
-          retryCount = 0;
-        }
-        isProcessing = false;
+      } else {
+        // Can't process non-chat messages without WebSocket
+        // We'll discard auth messages since we're in HTTP-only mode
+        console.warn("Discarding non-chat message in HTTP-only mode:", message.type);
+        messageQueue.shift();
       }
     } 
-    // For non-chat messages with no WebSocket, we can't process them (auth, etc)
+    // No way to process this message
     else {
-      // Can't process non-chat messages without WebSocket
-      // Keep them in queue for next connection attempt
-      isProcessing = false;
+      console.warn("No way to process message, discarding:", message.type);
+      messageQueue.shift();
     }
   }
   
   // If there are more messages and we stopped processing due to errors,
   // retry after a delay
   if (messageQueue.length > 0 && !isProcessing) {
+    console.log(`Scheduling retry for ${messageQueue.length} remaining messages in 3 seconds`);
     setTimeout(processMessageQueue, 3000);
   }
 }
