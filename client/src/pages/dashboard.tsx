@@ -83,7 +83,7 @@ export default function Dashboard() {
   // Get models status
   const { data: modelStatus, isLoading: modelsLoading } = useQuery({
     queryKey: ['/api/ai/models/status'],
-    queryFn: { staleTime: 10000 },
+    refetchInterval: 10000,
   });
 
   // Get continuous execution projects
@@ -103,7 +103,7 @@ export default function Dashboard() {
     refetch: refetchOpenManusProjects
   } = useQuery({
     queryKey: ['/api/ai/openmanus/projects'],
-    refetchInterval: selectedProject ? 5000 : false,
+    refetchInterval: selectedOpenManusProject ? 5000 : false,
   });
 
   // Get selected project details
@@ -114,6 +114,17 @@ export default function Dashboard() {
   } = useQuery({
     queryKey: ['/api/ai/continuous/project', selectedProject],
     enabled: !!selectedProject,
+    refetchInterval: 3000,
+  });
+  
+  // Get OpenManus project details
+  const {
+    data: openManusProjectDetails,
+    isLoading: openManusProjectDetailsLoading,
+    refetch: refetchOpenManusProjectDetails
+  } = useQuery({
+    queryKey: ['/api/ai/openmanus/project', selectedOpenManusProject],
+    enabled: !!selectedOpenManusProject,
     refetchInterval: 3000,
   });
 
