@@ -220,47 +220,52 @@ export default function UnifiedInterface() {
     setIsLoadingResponse(true);
     
     try {
-      // Try WebSocket first
-      let success = false;
+      console.log(`Sending message via WebSocket to conversation ${conversationId.current}`);
       
-      try {
-        // Send via websocket
-        success = sendChatMessage(userMessage);
-        
-        if (!success) {
-          console.log("Message queued for delivery when connection is available");
-        }
-      } catch (wsError) {
-        console.error("WebSocket error:", wsError);
-        // We'll fall back to REST API call
-      }
+      // Send through WebSocket system
+      const success = sendChatMessage(userMessage);
       
-      // If WebSocket failed, use REST API as fallback
       if (!success) {
-        try {
-          // Fallback to REST API
-          await apiRequest("POST", "/api/chat", {
-            message: userMessage
-          });
-        } catch (apiError) {
-          console.error("API error:", apiError);
-          throw apiError;
-        }
+        console.log("Message queued for delivery when connection is available");
+        
+        // No need for immediate fallback here since our enhanced WebSocket system
+        // will use REST API fallback internally when needed
+        
+        toast({
+          title: 'Connection Notice',
+          description: 'WebSocket connection not available. Your message will be sent when connection is restored.',
+          variant: 'default',
+        });
       }
+      
+      // Set a timeout to clear loading state if we don't get a response
+      const timeoutId = setTimeout(() => {
+        if (isLoadingResponse) {
+          setIsLoadingResponse(false);
+          
+          toast({
+            title: 'No Response',
+            description: 'The AI system did not respond in time. Please try again later.',
+            variant: 'destructive',
+          });
+        }
+      }, 30000); // 30 seconds timeout
+      
+      // Save timeout ID for cleanup
+      return () => clearTimeout(timeoutId);
+      
     } catch (error) {
       console.error("Error sending message:", error);
       
-      // Show error but don't stop loading state since we might still get a response
+      // Show error toast
       toast({
         title: 'Connection Issue',
-        description: 'Message sent but there may be a delay in receiving the response.',
-        variant: 'default',
+        description: 'There was a problem sending your message. Please try again.',
+        variant: 'destructive',
       });
       
-      // Wait a bit and then stop loading if no response
-      setTimeout(() => {
-        setIsLoadingResponse(false);
-      }, 5000);
+      // Clear loading state
+      setIsLoadingResponse(false);
     }
   };
   

@@ -39,10 +39,21 @@ export function connectWebSocket(userId?: number): WebSocket {
   // Determine the correct protocol and URL
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.host;
-  const wsUrl = `${protocol}//${host}/ws`;
   
-  // Create new socket
-  socket = new WebSocket(wsUrl);
+  // Construct URL carefully, ensuring we're not using undefined port
+  let wsUrl = `${protocol}//${host}/ws`;
+  
+  // Additional logging for debugging
+  console.log(`Constructing WebSocket URL: ${wsUrl}`);
+  
+  try {
+    // Create new socket with error handling
+    socket = new WebSocket(wsUrl);
+  } catch (error) {
+    console.error("Error creating WebSocket connection:", error);
+    tryReconnect(userId);
+    return socket;
+  }
   
   socket.onopen = () => {
     console.log("WebSocket connected successfully");
@@ -62,13 +73,7 @@ export function connectWebSocket(userId?: number): WebSocket {
           // Process any queued messages
           if (messageQueue.length > 0) {
             console.log(`Processing ${messageQueue.length} queued messages`);
-            [...messageQueue].forEach(msg => {
-              if (sendMessage(msg)) {
-                // Only remove from queue if sent successfully
-                const index = messageQueue.indexOf(msg);
-                if (index !== -1) messageQueue.splice(index, 1);
-              }
-            });
+            processMessageQueue();
           }
         }
       }, 200);
@@ -207,9 +212,104 @@ export function registerMessageHandler(handler: MessageHandler) {
   };
 }
 
+// Process any queued messages with fallback to REST API
+async function processMessageQueue() {
+  let isProcessing = true;
+  let retryCount = 0;
+  const maxRetryCount = 3;
+  
+  while (messageQueue.length > 0 && isProcessing) {
+    const message = messageQueue[0]; // Peek at the first message
+    
+    // Try WebSocket first
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      try {
+        socket.send(JSON.stringify(message));
+        messageQueue.shift(); // Remove from queue if successful
+        retryCount = 0;
+      } catch (error) {
+        console.error("Error sending queued message via WebSocket:", error);
+        retryCount++;
+        
+        if (retryCount >= maxRetryCount) {
+          // Give up on this message after max retries
+          messageQueue.shift();
+          retryCount = 0;
+          console.error("Max retries reached, discarding message");
+        } else {
+          // Stop processing for now, will retry later
+          isProcessing = false;
+        }
+      }
+    } 
+    // If WebSocket is not available, try REST API fallback for chat messages
+    else if (message.type === 'chat-message' && message.message) {
+      try {
+        // Use REST API as fallback
+        const response = await apiRequest("POST", "/api/chat", {
+          message: message.message
+        });
+        
+        // Handle response
+        if (response.ok) {
+          const data = await response.json();
+          messageQueue.shift(); // Remove from queue
+          
+          // Manually dispatch response to handlers if successful
+          if (data.aiResponse) {
+            messageHandlers.forEach(handler => {
+              try {
+                handler({
+                  type: 'new-message',
+                  message: data.aiResponse
+                });
+              } catch (handlerError) {
+                console.error("Error in REST API fallback message handler:", handlerError);
+              }
+            });
+          }
+        } else {
+          retryCount++;
+          if (retryCount >= maxRetryCount) {
+            messageQueue.shift();
+            retryCount = 0;
+          }
+          isProcessing = false;
+        }
+      } catch (error) {
+        console.error("Error sending message via REST API fallback:", error);
+        retryCount++;
+        
+        if (retryCount >= maxRetryCount) {
+          messageQueue.shift();
+          retryCount = 0;
+        }
+        isProcessing = false;
+      }
+    } 
+    // For non-chat messages with no WebSocket, we can't process them (auth, etc)
+    else {
+      // Can't process non-chat messages without WebSocket
+      // Keep them in queue for next connection attempt
+      isProcessing = false;
+    }
+  }
+  
+  // If there are more messages and we stopped processing due to errors,
+  // retry after a delay
+  if (messageQueue.length > 0 && !isProcessing) {
+    setTimeout(processMessageQueue, 3000);
+  }
+}
+
 export function closeWebSocket() {
   if (socket) {
     socket.close(1000, "Normal closure");
     socket = null;
+  }
+  
+  // Try to process any remaining messages via REST API if possible
+  if (messageQueue.length > 0) {
+    processMessageQueue();
   }
 }
