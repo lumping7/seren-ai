@@ -522,13 +522,21 @@ Format your response as a detailed technical document that a development team ca
         requirements = content.get("requirements", "")
         architecture = content.get("architecture", "")
         options = content.get("options", {})
+        language = options.get("language", "")
         
         if not requirements and not architecture:
             return {"error": "Either requirements or architecture must be provided for code generation"}
             
-        # Fallback to model inference
-        prompt = self._create_code_prompt(requirements, architecture, options)
-        return self._generate_text(prompt)
+        try:
+            # Use model inference with proper error handling
+            prompt = self._create_code_prompt(requirements, architecture, options)
+            result = self._generate_text(prompt)
+            if isinstance(result, dict) and "status" in result and result["status"] == "error":
+                return result
+            return result
+        except Exception as e:
+            logger.error(f"Error generating code: {e}")
+            return self._generate_code_unavailable(language or "unknown")
         
     def _create_code_prompt(self, requirements, architecture, options):
         """Create a prompt for code generation"""
@@ -575,18 +583,17 @@ Generate complete, working code files that can be directly implemented.
         if not code:
             return {"error": "Code is required for enhancement"}
             
-        # Use liquid neural network for enhancement if available
-        if global_state["liquid_nn"] and HAS_TORCH:
-            # This is a simplified example - in a real system, we would need to:
-            # 1. Convert code to embeddings or features
-            # 2. Process through the LNN
-            # 3. Generate enhanced code based on LNN output
-            # For now, we'll just use a fallback
-            logger.info("Liquid neural network is available but not fully integrated for code enhancement")
-            
-        # Fallback to model inference
-        prompt = self._create_enhancement_prompt(code, requirements, enhancement, language)
-        return self._generate_text(prompt)
+        try:
+            # Note: We're not using LNN even if available as it would require proper integration
+            # Use model inference with proper error handling
+            prompt = self._create_enhancement_prompt(code, requirements, enhancement, language)
+            result = self._generate_text(prompt)
+            if isinstance(result, dict) and "status" in result and result["status"] == "error":
+                return result
+            return result
+        except Exception as e:
+            logger.error(f"Error enhancing code: {e}")
+            return self._generate_code_unavailable(language or "unknown")
         
     def _create_enhancement_prompt(self, code, requirements, enhancement, language):
         """Create a prompt for code enhancement"""
@@ -621,13 +628,21 @@ Generate complete, working code files that can be directly implemented.
         code = content.get("code", "")
         requirements = content.get("requirements", "")
         options = content.get("options", {})
+        language = options.get("language", "")
         
         if not code:
             return {"error": "Code is required for test generation"}
             
-        # Fallback to model inference
-        prompt = self._create_test_prompt(code, requirements, options)
-        return self._generate_text(prompt)
+        try:
+            # Use model inference with proper error handling
+            prompt = self._create_test_prompt(code, requirements, options)
+            result = self._generate_text(prompt)
+            if isinstance(result, dict) and "status" in result and result["status"] == "error":
+                return result
+            return result
+        except Exception as e:
+            logger.error(f"Error generating tests: {e}")
+            return self._generate_tests_unavailable(language or "unknown")
         
     def _create_test_prompt(self, code, requirements, options):
         """Create a prompt for test generation"""
@@ -664,9 +679,16 @@ Your tests should be production-ready and include appropriate setup, teardown, a
         if not code:
             return {"error": "Code is required for debugging"}
             
-        # Fallback to model inference
-        prompt = self._create_debug_prompt(code, error, language)
-        return self._generate_text(prompt)
+        try:
+            # Use model inference with proper error handling
+            prompt = self._create_debug_prompt(code, error, language)
+            result = self._generate_text(prompt)
+            if isinstance(result, dict) and "status" in result and result["status"] == "error":
+                return result
+            return result
+        except Exception as e:
+            logger.error(f"Error debugging code: {e}")
+            return self._generate_debug_unavailable(language or "unknown")
         
     def _create_debug_prompt(self, code, error, language):
         """Create a prompt for debugging"""
@@ -702,9 +724,16 @@ Provide the complete fixed code and ensure it's production-ready.
         if not code:
             return {"error": "Code is required for review"}
             
-        # Fallback to model inference
-        prompt = self._create_review_prompt(code, tests, requirements, options)
-        return self._generate_text(prompt)
+        try:
+            # Use model inference with proper error handling
+            prompt = self._create_review_prompt(code, tests, requirements, options)
+            result = self._generate_text(prompt)
+            if isinstance(result, dict) and "status" in result and result["status"] == "error":
+                return result
+            return result
+        except Exception as e:
+            logger.error(f"Error generating code review: {e}")
+            return self._generate_fallback_review()
         
     def _create_review_prompt(self, code, tests, requirements, options):
         """Create a prompt for code review"""
@@ -758,9 +787,16 @@ Your review should be thorough and actionable, helping to improve the code quali
         if not code:
             return {"error": "Code is required for explanation"}
             
-        # Fallback to model inference
-        prompt = self._create_explanation_prompt(code, language, detail_level)
-        return self._generate_text(prompt)
+        try:
+            # Use model inference with proper error handling
+            prompt = self._create_explanation_prompt(code, language, detail_level)
+            result = self._generate_text(prompt)
+            if isinstance(result, dict) and "status" in result and result["status"] == "error":
+                return result
+            return result
+        except Exception as e:
+            logger.error(f"Error generating code explanation: {e}")
+            return self._generate_fallback_explanation()
         
     def _create_explanation_prompt(self, code, language, detail_level):
         """Create a prompt for code explanation"""
