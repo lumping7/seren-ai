@@ -35,13 +35,21 @@ logging.basicConfig(
 logger = logging.getLogger("model_server")
 
 # Import conditional dependencies - these may or may not be available
-import torch
-HAS_TORCH = True
-logger.info("PyTorch is available")
+try:
+    import torch
+    HAS_TORCH = True
+    logger.info("PyTorch is available")
+except ImportError:
+    HAS_TORCH = False
+    logger.warning("PyTorch is not available")
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
-HAS_TRANSFORMERS = True
-logger.info("Transformers is available")
+try:
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    HAS_TRANSFORMERS = True
+    logger.info("Transformers is available")
+except ImportError:
+    HAS_TRANSFORMERS = False
+    logger.warning("Transformers is not available")
 
 # Define fallback classes and functions
 from enum import Enum
@@ -247,6 +255,12 @@ def load_model():
     logger.info(f"Loading {model_type} model...")
     
     try:
+        # Check if required libraries are available
+        if not HAS_TRANSFORMERS or not HAS_TORCH:
+            logger.error("Required dependencies PyTorch or Transformers not available")
+            global_state["status"] = "ready"  # Mark as ready but with limited functionality
+            return True
+        
         # Model selection based on type
         if "qwen" in model_type.lower():
             model_id = "Qwen/Qwen-7B"  # Actual model ID for production
@@ -257,14 +271,21 @@ def load_model():
             
         logger.info(f"Using model ID: {model_id}")
         
-        # Load tokenizer and model
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id,
-            torch_dtype=torch.float16,  # Use float16 for efficiency
-            device_map="auto",  # Automatically use available devices
-            low_cpu_mem_usage=True
-        )
+        # Use the global imports we've already checked for
+        # Don't try to reference transformers classes directly
+        
+        # Load tokenizer and model - only if both imports succeeded earlier
+        if 'AutoTokenizer' in globals() and 'AutoModelForCausalLM' in globals() and 'torch' in globals():
+            tokenizer = globals()['AutoTokenizer'].from_pretrained(model_id)
+            model = globals()['AutoModelForCausalLM'].from_pretrained(
+                model_id,
+                torch_dtype=globals()['torch'].float16,  # Use float16 for efficiency
+                device_map="auto",  # Automatically use available devices
+                low_cpu_mem_usage=True
+            )
+        else:
+            logger.error("Required transformer classes not found in global scope")
+            raise ImportError("Missing required transformer classes")
         
         global_state["tokenizer"] = tokenizer
         global_state["model"] = model
@@ -274,7 +295,9 @@ def load_model():
     except Exception as e:
         logger.error(f"Failed to load model {model_type}: {e}")
         logger.error(traceback.format_exc())
-        return False
+        # We'll still return true so the server can start, but without model capabilities
+        global_state["status"] = "ready"  # Mark as ready but with limited functionality
+        return True
 
 # Message processing system
 class MessageProcessor:
@@ -760,439 +783,61 @@ Your review should be thorough and actionable, helping to improve the code quali
     # Helper methods for model interaction
     def _generate_text(self, prompt):
         """Generate text using the loaded model"""
-        if not global_state["model"] or not global_state["tokenizer"]:
-            logger.error("Model or tokenizer not available")
-            raise RuntimeError("Model or tokenizer not initialized - system cannot proceed without the required AI models")
+        # Check if transformers model is available
+        if global_state["model"] and global_state["tokenizer"] and HAS_TRANSFORMERS and HAS_TORCH:
+            logger.info("Generating text using transformers model")
             
-        logger.info("Generating text using transformers model")
-        
-        inputs = global_state["tokenizer"](prompt, return_tensors="pt")
-        
-        # Generate
-        outputs = global_state["model"].generate(
-            **inputs,
-            max_length=1024,
-            temperature=0.7,
-            top_p=0.9,
-            do_sample=True
-        )
-        
-        # Decode
-        generated_text = global_state["tokenizer"].decode(outputs[0], skip_special_tokens=True)
-        
-        # Extract the generated part (exclude the prompt)
-        generated_text = generated_text[len(prompt):]
-        
-        return generated_text.strip()
-    
-    def _generate_fallback_architecture(self):
-        """Generate fallback architecture document"""
-        return """# Software Architecture Design
-
-## High-Level Architecture Overview
-
-This system follows a three-tier architecture with the following components:
-
-1. **Frontend Layer**: Responsible for user interface and experience
-2. **Application Layer**: Handles business logic and application workflows
-3. **Data Layer**: Manages data persistence and retrieval
-
-## Component Diagram
-
-```
-+----------------+      +----------------+      +----------------+
-|                |      |                |      |                |
-|  Frontend      |<---->|  Application   |<---->|  Data          |
-|  Layer         |      |  Layer         |      |  Layer         |
-|                |      |                |      |                |
-+----------------+      +----------------+      +----------------+
-```
-
-## Data Model
-
-The system uses the following key entities:
-
-1. **User**: Represents system users
-   - id (Primary Key)
-   - username
-   - email
-   - password (hashed)
-   - created_at
-   - updated_at
-
-2. **Product**: Represents products in the system
-   - id (Primary Key)
-   - name
-   - description
-   - price
-   - inventory_count
-   - created_at
-   - updated_at
-
-## API Endpoints
-
-The system exposes the following RESTful API endpoints:
-
-- `GET /api/users` - Get all users
-- `GET /api/users/:id` - Get user by ID
-- `POST /api/users` - Create a new user
-- `PUT /api/users/:id` - Update a user
-- `DELETE /api/users/:id` - Delete a user
-
-- `GET /api/products` - Get all products
-- `GET /api/products/:id` - Get product by ID
-- `POST /api/products` - Create a new product
-- `PUT /api/products/:id` - Update a product
-- `DELETE /api/products/:id` - Delete a product
-
-## Security Considerations
-
-1. All API endpoints are protected with JWT authentication
-2. Passwords are securely hashed using bcrypt
-3. HTTPS is enforced for all communications
-4. Input validation is performed on all user inputs
-
-## Scalability and Performance Considerations
-
-1. Database connection pooling for efficient resource utilization
-2. Caching layer for frequently accessed data
-3. Asynchronous processing for long-running tasks
-4. Horizontal scaling capability for all components
-"""
-
-    def _generate_fallback_code(self, language):
-        """Generate fallback code"""
-        if language == "Python":
-            return """# User Management System
-from flask import Flask, request, jsonify
-import os
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
-import jwt
-from datetime import datetime, timedelta
-from functools import wraps
-
-# Initialize Flask app
-app = Flask(__name__)
-
-# Configuration
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-please-change')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///users.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Initialize database
-db = SQLAlchemy(app)
-
-# User model
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    def __repr__(self):
-        return f'<User {self.username}>'
-
-# Token validation decorator
-def token_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = request.headers.get('Authorization')
-        
-        if not token:
-            return jsonify({'message': 'Token is missing!'}), 401
-            
-        try:
-            token = token.split(" ")[1]  # Remove 'Bearer ' prefix
-            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
-            current_user = User.query.filter_by(id=data['user_id']).first()
-        except:
-            return jsonify({'message': 'Token is invalid!'}), 401
-            
-        return f(current_user, *args, **kwargs)
-    
-    return decorated
-
-# Routes
-@app.route('/api/users', methods=['GET'])
-@token_required
-def get_all_users(current_user):
-    users = User.query.all()
-    result = []
-    
-    for user in users:
-        user_data = {}
-        user_data['id'] = user.id
-        user_data['username'] = user.username
-        user_data['email'] = user.email
-        user_data['created_at'] = user.created_at.isoformat()
-        result.append(user_data)
-    
-    return jsonify(result), 200
-
-# Create database tables
-with app.app_context():
-    db.create_all()
-
-# Run the application
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
-"""
-        elif language == "JavaScript" or language == "TypeScript":
-            return """// User Management System
-const express = require('express');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const { Pool } = require('pg');
-const dotenv = require('dotenv');
-
-// Load environment variables
-dotenv.config();
-
-// Initialize Express app
-const app = express();
-app.use(express.json());
-
-// Database configuration
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
-
-// Initialize database
-async function initializeDatabase() {
-  try {
-    const client = await pool.connect();
-    
-    // Create users table if it doesn't exist
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(80) UNIQUE NOT NULL,
-        email VARCHAR(120) UNIQUE NOT NULL,
-        password VARCHAR(200) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    
-    client.release();
-    console.log('Database initialized successfully');
-  } catch (error) {
-    console.error('Error initializing database:', error);
-    process.exit(1);
-  }
-}
-
-// Middleware for JWT authentication
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (token == null) return res.status(401).json({ message: 'Token is missing' });
-  
-  jwt.verify(token, process.env.JWT_SECRET || 'dev-key-please-change', (err, user) => {
-    if (err) return res.status(403).json({ message: 'Token is invalid' });
-    
-    req.user = user;
-    next();
-  });
-}
-
-// Routes
-app.get('/api/users', authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query('SELECT id, username, email, created_at FROM users');
-    res.status(200).json(result.rows);
-  } catch (error) {
-    console.error('Error getting users:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Start the server
-const PORT = process.env.PORT || 3000;
-
-// Initialize database and then start server
-initializeDatabase().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-});
-"""
+            try:
+                inputs = global_state["tokenizer"](prompt, return_tensors="pt")
+                
+                # Generate
+                outputs = global_state["model"].generate(
+                    **inputs,
+                    max_length=1024,
+                    temperature=0.7,
+                    top_p=0.9,
+                    do_sample=True
+                )
+                
+                # Decode
+                generated_text = global_state["tokenizer"].decode(outputs[0], skip_special_tokens=True)
+                
+                # Extract the generated part (exclude the prompt)
+                generated_text = generated_text[len(prompt):]
+                
+                return generated_text.strip()
+                
+            except Exception as e:
+                logger.error(f"Error generating with transformers: {e}")
+                logger.error(traceback.format_exc())
+                
+                # Return error message to client
+                raise RuntimeError(f"Model inference failed: {str(e)}")
         else:
-            return "Sorry, the fallback code generator only supports Python, JavaScript, and TypeScript at the moment."
-
-    def _generate_fallback_tests(self, language):
-        """Generate fallback tests"""
-        if language == "Python":
-            return """# Test suite for User Management System
-import unittest
-import json
-from app import app, db, User
-import os
-import tempfile
-import jwt
-from datetime import datetime, timedelta
-
-class UserAPITests(unittest.TestCase):
-    def setUp(self):
-        # Set up a temporary database
-        self.db_fd, app.config['DATABASE'] = tempfile.mkstemp()
-        app.config['TESTING'] = True
-        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + app.config['DATABASE']
-        self.app = app.test_client()
-        
-        with app.app_context():
-            db.create_all()
+            # We're missing dependencies but the system is running without models
+            logger.error("Required AI dependencies (PyTorch/Transformers) not available")
             
-            # Create a test user
-            test_user = User(
-                username='testuser',
-                email='test@example.com',
-                password='sha256$abc123'  # This is not a real hash
-            )
-            db.session.add(test_user)
-            db.session.commit()
-            self.test_user_id = test_user.id
+            # Return a status message that will be shown to the client
+            return {"status": "error", "message": "Required AI models or dependencies not available. This is a production system and requires the full AI stack to be installed."}
     
-    def tearDown(self):
-        # Clean up database
-        with app.app_context():
-            db.drop_all()
-        os.close(self.db_fd)
-        os.unlink(app.config['DATABASE'])
+    def _generate_error_message(self, feature_type):
+        """Generate error message when AI models are unavailable"""
+        return {
+            "status": "error", 
+            "message": f"Cannot generate {feature_type}. AI models are not available. This is a production system and requires PyTorch and Transformers to be installed."
+        }
+
+    def _generate_code_unavailable(self, language):
+        """Return error when code generation is unavailable"""
+        return self._generate_error_message(f"code for {language}")
+
+    def _generate_tests_unavailable(self, language):
+        """Return error when test generation is unavailable"""
+        return self._generate_error_message(f"tests for {language}")
     
-    def test_get_all_users_authenticated(self):
-        # Test getting all users with a valid token
-        token = jwt.encode({
-            'user_id': self.test_user_id,
-            'exp': datetime.utcnow() + timedelta(hours=1)
-        }, app.config['SECRET_KEY'], algorithm="HS256")
-        
-        response = self.app.get(
-            '/api/users',
-            headers={'Authorization': f'Bearer {token}'}
-        )
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.data)
-        self.assertIsInstance(data, list)
-        self.assertEqual(len(data), 1)
-"""
-        elif language == "JavaScript" or language == "TypeScript":
-            return """// Test suite for User Management System
-const request = require('supertest');
-const { Pool } = require('pg');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const app = require('../app');  // Adjust path to your app
-const { expect } = require('chai');
-
-// Mock the database
-jest.mock('pg', () => {
-  const mPool = {
-    connect: jest.fn().mockImplementation(() => Promise.resolve({
-      query: jest.fn(),
-      release: jest.fn(),
-    })),
-    query: jest.fn(),
-    end: jest.fn(),
-  };
-  return { Pool: jest.fn(() => mPool) };
-});
-
-// Mock bcrypt and jwt for easier testing
-jest.mock('bcrypt', () => ({
-  hash: jest.fn().mockImplementation(() => Promise.resolve('hashedpassword')),
-  compare: jest.fn(),
-}));
-
-jest.mock('jsonwebtoken', () => ({
-  sign: jest.fn().mockReturnValue('mock_token'),
-  verify: jest.fn(),
-}));
-
-describe('User API', () => {
-  let pool;
-  
-  beforeEach(() => {
-    // Get the mocked pool
-    pool = new Pool();
-    pool.query.mockReset();
-    bcrypt.compare.mockReset();
-    jwt.verify.mockReset();
-  });
-  
-  afterAll(() => {
-    pool.end();
-  });
-  
-  describe('GET /api/users', () => {
-    it('should return all users when authenticated', async () => {
-      // Mock JWT verification
-      jwt.verify.mockImplementation((token, secret, callback) => {
-        callback(null, { userId: 1, username: 'testuser' });
-      });
-      
-      // Mock DB query response
-      pool.query.mockResolvedValueOnce({
-        rows: [
-          { id: 1, username: 'testuser', email: 'test@example.com', created_at: new Date() }
-        ]
-      });
-      
-      const response = await request(app)
-        .get('/api/users')
-        .set('Authorization', 'Bearer valid_token');
-      
-      expect(response.status).to.equal(200);
-      expect(response.body).to.be.an('array');
-      expect(response.body).to.have.lengthOf(1);
-      expect(response.body[0]).to.have.property('username', 'testuser');
-    });
-  });
-});
-"""
-        else:
-            return "Sorry, the fallback test generator only supports Python, JavaScript, and TypeScript at the moment."
-    
-    def _generate_fallback_debug(self, language):
-        """Generate fallback debug response"""
-        return """# Analysis of the Bug
-
-Looking at your code and the error message, I've identified the main issue:
-
-## The Problem
-
-The code is attempting to access a property of an object that might be undefined or null. This is causing a runtime error when the code executes.
-
-## Fixed Code
-
-```javascript
-// Original problematic code
-function processData(data) {
-  return data.value.toString();
-}
-
-// Fixed code
-function processData(data) {
-  if (!data || !data.value) {
-    return '';
-  }
-  return data.value.toString();
-}
-```
-
-## Explanation of Changes
-
-1. **Added null/undefined check**: The fixed version checks if `data` exists and if `data.value` exists before trying to access it.
-2. **Added a fallback return value**: If the data is invalid, the function now returns an empty string instead of crashing.
-3. **Preserved original functionality**: When valid data is provided, the function behaves exactly as before.
-
-This makes the code more robust by properly handling edge cases where missing or malformed data might be passed to the function.
-"""
+    def _generate_debug_unavailable(self, language):
+        """Return error when debug is unavailable"""
+        return self._generate_error_message(f"debugging for {language}")
     
     def _generate_fallback_review(self):
         """Generate fallback code review"""
