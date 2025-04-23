@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 import { 
   Loader2, 
   Code, 
@@ -17,10 +17,30 @@ import {
   Settings,
   BarChart3,
   Search,
-  MessageSquare
+  MessageSquare,
+  Plus,
+  X,
+  Check,
+  ChevronRight,
+  Terminal,
+  Eye,
+  Lightbulb,
+  AlertTriangle
 } from 'lucide-react';
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 
 import {
   Card,
@@ -144,6 +164,10 @@ export default function Dashboard() {
               <BarChart3 className="h-4 w-4 mr-2" />
               Overview
             </TabsTrigger>
+            <TabsTrigger value="projects">
+              <GitBranch className="h-4 w-4 mr-2" />
+              Projects
+            </TabsTrigger>
             <TabsTrigger value="models">
               <Brain className="h-4 w-4 mr-2" />
               AI Models
@@ -157,6 +181,181 @@ export default function Dashboard() {
               Settings
             </TabsTrigger>
           </TabsList>
+          
+          {/* Projects Tab */}
+          <TabsContent value="projects" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="md:col-span-2">
+                <Card className="h-full">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <div>
+                      <CardTitle>Your Projects</CardTitle>
+                      <CardDescription>
+                        View and manage your AI-assisted software projects
+                      </CardDescription>
+                    </div>
+                    <Button size="sm" className="gap-1">
+                      <Plus className="h-4 w-4" />
+                      New Project
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {/* Sample projects list */}
+                      {[
+                        {
+                          id: 1,
+                          name: "E-commerce Platform",
+                          description: "Modern React e-commerce site with payment integration",
+                          status: "In Progress",
+                          lastUpdated: "2 hours ago",
+                          progress: 65
+                        },
+                        {
+                          id: 2,
+                          name: "Personal Finance API",
+                          description: "RESTful API with authentication and data visualization",
+                          status: "Completed",
+                          lastUpdated: "2 days ago",
+                          progress: 100
+                        },
+                        {
+                          id: 3,
+                          name: "Task Management App",
+                          description: "Mobile-friendly task organizer with team collaboration",
+                          status: "Planning",
+                          lastUpdated: "4 hours ago",
+                          progress: 20
+                        }
+                      ].map((project) => (
+                        <div key={project.id} className="border rounded-lg p-4 space-y-3 hover:bg-accent/50 transition-colors cursor-pointer">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h3 className="text-base font-medium">{project.name}</h3>
+                              <p className="text-sm text-muted-foreground">{project.description}</p>
+                            </div>
+                            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Status:</span>
+                              <Badge variant={
+                                project.status === "Completed" ? "outline" : 
+                                project.status === "In Progress" ? "secondary" : 
+                                "default"
+                              }>
+                                {project.status}
+                              </Badge>
+                            </div>
+                            
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Last updated:</span>
+                              <span>{project.lastUpdated}</span>
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Progress:</span>
+                                <span>{project.progress}%</span>
+                              </div>
+                              <Progress value={project.progress} />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              
+              <div className="md:col-span-1">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Create New Project</CardTitle>
+                    <CardDescription>
+                      Define requirements to have AI generate your project
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium" htmlFor="project-name">
+                        Project Name
+                      </label>
+                      <Input id="project-name" placeholder="Enter project name" />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium" htmlFor="project-description">
+                        Description & Requirements
+                      </label>
+                      <Textarea 
+                        id="project-description" 
+                        placeholder="Describe what you want the AI to build..." 
+                        className="min-h-[120px]"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Be as detailed as possible about features, technologies, and goals.
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">
+                        Preferred Language
+                      </label>
+                      <Select defaultValue="javascript">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select language" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="javascript">JavaScript/TypeScript</SelectItem>
+                          <SelectItem value="python">Python</SelectItem>
+                          <SelectItem value="java">Java</SelectItem>
+                          <SelectItem value="csharp">C#</SelectItem>
+                          <SelectItem value="go">Go</SelectItem>
+                          <SelectItem value="rust">Rust</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">
+                        Preferred Framework
+                      </label>
+                      <Select defaultValue="react">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select framework" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="react">React</SelectItem>
+                          <SelectItem value="vue">Vue</SelectItem>
+                          <SelectItem value="angular">Angular</SelectItem>
+                          <SelectItem value="nextjs">Next.js</SelectItem>
+                          <SelectItem value="django">Django</SelectItem>
+                          <SelectItem value="flask">Flask</SelectItem>
+                          <SelectItem value="express">Express.js</SelectItem>
+                          <SelectItem value="spring">Spring Boot</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Switch id="advanced-features" />
+                      <label className="text-sm font-medium" htmlFor="advanced-features">
+                        Include advanced AI features
+                      </label>
+                    </div>
+                  </CardContent>
+                  <CardFooter>
+                    <Button className="w-full gap-2">
+                      <Lightbulb className="h-4 w-4" />
+                      Generate Project
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
           
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-4">
