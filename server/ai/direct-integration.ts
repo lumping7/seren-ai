@@ -7,8 +7,21 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from 'events';
-import { DevTeamRole, ModelType } from './model-integration';
 import { performance } from 'perf_hooks';
+
+// Define enums directly in this file to be self-contained
+export enum ModelType {
+  QWEN_OMNI = 'qwen2.5-7b-omni',
+  OLYMPIC_CODER = 'olympiccoder-7b',
+  HYBRID = 'hybrid'
+}
+
+export enum DevTeamRole {
+  ARCHITECT = 'architect',  // System design and architecture planning
+  BUILDER = 'builder',      // Implementation and coding
+  TESTER = 'tester',        // Testing and quality assurance
+  REVIEWER = 'reviewer'     // Code review and enhancement
+}
 
 // Event emitter for direct model events
 export const directModelEvents = new EventEmitter();
