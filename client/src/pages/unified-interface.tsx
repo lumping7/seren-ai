@@ -6,6 +6,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { connectWebSocket, sendChatMessage, registerMessageHandler, closeWebSocket } from '@/lib/websocket';
 import { AIMessage, Project, BackgroundTask } from '@/lib/types';
+import { Link } from 'wouter';
 
 import { 
   Loader2, 
@@ -359,6 +360,12 @@ export default function UnifiedInterface() {
                   <Code className="h-4 w-4 mr-2" />
                   AI Workspace
                 </Button>
+                <Link href="/setup-guide">
+                  <Button variant="ghost" className="w-full justify-start">
+                    <Settings className="h-4 w-4 mr-2" />
+                    LLM Setup Guide
+                  </Button>
+                </Link>
               </div>
             </div>
           </div>
