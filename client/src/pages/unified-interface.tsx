@@ -102,7 +102,7 @@ export default function UnifiedInterface() {
     const unregister = registerMessageHandler((data) => {
       if (data.type === 'new-message' && data.message) {
         // Add new message to chat
-        setChatMessages(prev => [...prev, data.message]);
+        setChatMessages(prev => [...prev, data.message as AIMessage]);
         
         // If it's an assistant response, we're no longer loading
         if (data.message.role === 'assistant') {
@@ -128,7 +128,9 @@ export default function UnifiedInterface() {
         // Show notification of completion
         toast({
           title: 'Task Complete',
-          description: data.message || 'A background task has completed successfully.',
+          description: typeof data.message === 'string' ? 
+            data.message : 
+            'A background task has completed successfully.',
         });
       }
     });
