@@ -5,11 +5,13 @@ import { Redirect, Route } from "wouter";
 export function ProtectedRoute({
   path,
   component: Component,
+  adminOnly = false,
 }: {
   path: string;
-  component: () => React.JSX.Element;
+  component: React.FC;
+  adminOnly?: boolean;
 }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isAdmin } = useAuth();
 
   if (isLoading) {
     return (
@@ -25,6 +27,19 @@ export function ProtectedRoute({
     return (
       <Route path={path}>
         <Redirect to="/auth" />
+      </Route>
+    );
+  }
+
+  if (adminOnly && !isAdmin) {
+    return (
+      <Route path={path}>
+        <div className="flex flex-col items-center justify-center min-h-screen">
+          <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
+          <p className="text-muted-foreground">
+            You need administrative privileges to access this page.
+          </p>
+        </div>
       </Route>
     );
   }

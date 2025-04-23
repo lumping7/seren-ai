@@ -3,49 +3,86 @@
 @tailwind utilities;
 
 :root {
-      --background: 0 0% 100%;
---foreground: 20 14.3% 4.1%;
---muted: 60 4.8% 95.9%;
---muted-foreground: 25 5.3% 44.7%;
---popover: 0 0% 100%;
---popover-foreground: 20 14.3% 4.1%;
---card: 0 0% 100%;
---card-foreground: 20 14.3% 4.1%;
---border: 20 5.9% 90%;
---input: 20 5.9% 90%;
---primary: 207 90% 54%;
---primary-foreground: 211 100% 99%;
---secondary: 60 4.8% 95.9%;
---secondary-foreground: 24 9.8% 10%;
---accent: 60 4.8% 95.9%;
---accent-foreground: 24 9.8% 10%;
---destructive: 0 84.2% 60.2%;
---destructive-foreground: 60 9.1% 97.8%;
---ring: 20 14.3% 4.1%;
---radius: 0.5rem;
-  }
-  .dark {
-      --background: 240 10% 3.9%;
---foreground: 0 0% 98%;
---muted: 240 3.7% 15.9%;
---muted-foreground: 240 5% 64.9%;
---popover: 240 10% 3.9%;
---popover-foreground: 0 0% 98%;
---card: 240 10% 3.9%;
---card-foreground: 0 0% 98%;
---border: 240 3.7% 15.9%;
---input: 240 3.7% 15.9%;
---primary: 207 90% 54%;
---primary-foreground: 211 100% 99%;
---secondary: 240 3.7% 15.9%;
---secondary-foreground: 0 0% 98%;
---accent: 240 3.7% 15.9%;
---accent-foreground: 0 0% 98%;
---destructive: 0 62.8% 30.6%;
---destructive-foreground: 0 0% 98%;
---ring: 240 4.9% 83.9%;
---radius: 0.5rem;
-  }
+  /* Light theme (default) */
+  --background: 0 0% 100%;
+  --foreground: 240 10% 3.9%;
+  --muted: 240 4.8% 95.9%;
+  --muted-foreground: 240 3.8% 46.1%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 10% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 3.9%;
+  --border: 240 5.9% 90%;
+  --input: 240 5.9% 90%;
+  --primary: 266 100% 50%; /* Purple */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 4.8% 95.9%;
+  --secondary-foreground: 240 5.9% 10%;
+  --accent: 265 90% 35%; /* Darker purple */
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
+  --ring: 266 100% 50%; /* Purple */
+  --radius: 0.5rem;
+  
+  /* Chart colors */
+  --chart-1: 266 100% 50%;
+  --chart-2: 280 100% 60%;
+  --chart-3: 250 100% 60%;
+  --chart-4: 220 100% 65%;
+  --chart-5: 190 100% 65%;
+  
+  /* Sidebar */
+  --sidebar-background: 240 10% 3.9%;
+  --sidebar-foreground: 0 0% 98%;
+  --sidebar-primary: 266 100% 50%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 265 90% 35%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-border: 240 3.7% 15.9%;
+  --sidebar-ring: 240 4.9% 83.9%;
+}
+
+.dark {
+  /* Dark theme (black and purple) */
+  --background: 0 0% 3%; /* Almost black */
+  --foreground: 0 0% 98%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 240 5% 64.9%;
+  --popover: 0 0% 5%;
+  --popover-foreground: 0 0% 98%;
+  --card: 0 0% 8%;
+  --card-foreground: 0 0% 98%;
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
+  --primary: 266 100% 50%; /* Vibrant purple */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 98%;
+  --accent: 265 90% 35%; /* Darker purple */
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 62.8% 40.6%;
+  --destructive-foreground: 0 0% 98%;
+  --ring: 266 100% 50%; /* Purple */
+  --radius: 0.5rem;
+  
+  /* Chart colors */
+  --chart-1: 266 100% 50%;
+  --chart-2: 280 100% 60%;
+  --chart-3: 250 100% 60%;
+  --chart-4: 220 100% 65%;
+  --chart-5: 190 100% 65%;
+  
+  /* Sidebar */
+  --sidebar-background: 0 0% 5%;
+  --sidebar-foreground: 0 0% 98%;
+  --sidebar-primary: 266 100% 50%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 265 90% 35%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-border: 0 0% 20%;
+  --sidebar-ring: 266 100% 50%;
+}
 
 @layer base {
   * {
@@ -62,19 +99,93 @@
   @apply text-xs font-medium px-2 py-0.5 rounded-full;
 }
 
-.model-badge.qwen {
+/* Light theme badges */
+:root .model-badge.qwen {
   @apply bg-blue-100 text-blue-800;
 }
 
-.model-badge.olympic {
+:root .model-badge.olympic {
   @apply bg-emerald-100 text-emerald-800;
 }
 
-.model-badge.hybrid {
+:root .model-badge.hybrid {
   @apply bg-purple-100 text-purple-800;
 }
 
-.model-badge.system {
+:root .model-badge.system {
   @apply bg-gray-100 text-gray-800;
+}
+
+/* Dark theme badges */
+.dark .model-badge.qwen {
+  @apply bg-blue-900 text-blue-200 border border-blue-700;
+}
+
+.dark .model-badge.olympic {
+  @apply bg-emerald-900 text-emerald-200 border border-emerald-700;
+}
+
+.dark .model-badge.hybrid {
+  @apply bg-purple-900 text-purple-200 border border-purple-700;
+}
+
+.dark .model-badge.system {
+  @apply bg-gray-900 text-gray-200 border border-gray-700;
+}
+
+/* Gradient text and effects */
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-indigo-600;
+}
+
+.dark .gradient-text {
+  @apply bg-gradient-to-r from-purple-400 to-indigo-300;
+}
+
+.gradient-border {
+  @apply border-transparent bg-origin-border relative;
+}
+
+.gradient-border::before {
+  content: "";
+  @apply absolute inset-0 rounded-[inherit] p-[1px] bg-gradient-to-r from-purple-500 to-indigo-600 -z-10;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+
+.dark .gradient-border::before {
+  @apply bg-gradient-to-r from-purple-400 to-indigo-300;
+}
+
+/* Animations */
+@keyframes pulse-purple {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.pulse-purple {
+  animation: pulse-purple 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted rounded-full;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  @apply bg-muted hover:bg-primary/50;
 }
 
