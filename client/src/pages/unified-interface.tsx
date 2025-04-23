@@ -265,8 +265,7 @@ export default function UnifiedInterface() {
       
       // Close any existing connection from websocket.ts
       try {
-        // Import websocket functions
-        const { closeWebSocket } = require('@/lib/websocket');
+        // Use imported closeWebSocket function directly
         closeWebSocket();
       } catch (e) {
         console.error("Error calling closeWebSocket:", e);

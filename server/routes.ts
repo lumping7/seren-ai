@@ -129,17 +129,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     ws.on('message', async (message) => {
       try {
+        console.log('WebSocket message received:', message.toString());
         const data = JSON.parse(message.toString());
         
-        if (data.type === 'chat-message') {
+        if (data.type === 'chat-message' && data.message) {
+          console.log('Processing chat message:', data.message.conversationId);
+          
           // Store message in database
           const savedMessage = await storage.createMessage({
-            conversationId: data.conversationId,
-            role: data.role,
-            content: data.content,
-            model: data.model,
-            userId: data.userId,
-            metadata: data.metadata || {}
+            conversationId: data.message.conversationId,
+            role: data.message.role,
+            content: data.message.content,
+            model: data.message.model,
+            userId: data.message.userId,
+            metadata: data.message.metadata || {}
           });
           
           // Broadcast message to all connected clients
@@ -153,32 +156,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           
           // If it's a user message, generate AI response
-          if (data.role === 'user') {
+          if (data.message.role === 'user') {
             // Process message with the appropriate AI model
             try {
               // Determine which AI model to use
-              const modelType = data.model || 'hybrid';
+              const modelType = data.message.model || 'hybrid';
               
               // Get AI response through the AI router
               const aiResponse = await fetch('http://localhost/api/ai/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  prompt: data.content,
+                  prompt: data.message.content,
                   model: modelType,
-                  conversation_id: data.conversationId,
-                  metadata: data.metadata
+                  conversation_id: data.message.conversationId,
+                  metadata: data.message.metadata
                 })
               }).then(res => res.json());
               
               // If AI response was successful, save it and broadcast it
               if (aiResponse && aiResponse.generated_text) {
                 const savedAiResponse = await storage.createMessage({
-                  conversationId: data.conversationId,
+                  conversationId: data.message.conversationId,
                   role: 'assistant',
                   content: aiResponse.generated_text,
                   model: modelType,
-                  userId: data.userId,
+                  userId: data.message.userId,
                   metadata: {
                     processingTime: aiResponse.metadata?.processing_time || 0,
                     tokensUsed: aiResponse.metadata?.tokens_used || 0,
@@ -198,11 +201,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               } else {
                 // If AI generation failed, use a fallback response
                 const fallbackResponse = await storage.createMessage({
-                  conversationId: data.conversationId,
+                  conversationId: data.message.conversationId,
                   role: 'assistant',
                   content: "I apologize, but I'm currently experiencing some technical difficulties. The AI models are running in limited functionality mode since we're not connected to Ollama. In a production environment, I would provide a complete response to your query.",
                   model: modelType,
-                  userId: data.userId,
+                  userId: data.message.userId,
                   metadata: { error: "AI generation failed", fallback: true }
                 });
                 
@@ -221,11 +224,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               // Send error response to client
               const errorResponse = await storage.createMessage({
-                conversationId: data.conversationId,
+                conversationId: data.message.conversationId,
                 role: 'assistant',
                 content: "I'm sorry, but there was an error processing your message. Please try again later.",
-                model: data.model || 'hybrid',
-                userId: data.userId,
+                model: data.message.model || 'hybrid',
+                userId: data.message.userId,
                 metadata: { error: error.message || "Unknown error", fallback: true }
               });
               

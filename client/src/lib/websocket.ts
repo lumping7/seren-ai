@@ -139,7 +139,36 @@ export function sendMessage(message: WebSocketMessage): boolean {
   }
 }
 
-export function sendChatMessage(message: AIMessage) {
+export function sendChatMessage(message: AIMessage): boolean {
+  console.log('Attempting to send chat message via WebSocket', message.conversationId);
+  
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    console.warn('WebSocket not connected when trying to send chat message. Creating new connection...');
+    
+    // Try to create a new connection
+    try {
+      socket = connectWebSocket(message.userId as number);
+      
+      // Queue the message to be sent after connection is established
+      setTimeout(() => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          console.log('Sending delayed chat message after reconnection');
+          socket.send(JSON.stringify({
+            type: 'chat-message',
+            message
+          }));
+        } else {
+          console.error('Failed to send delayed chat message - socket still not ready');
+        }
+      }, 1000); // Wait for connection to establish
+      
+      return false;
+    } catch (error) {
+      console.error('Failed to reconnect WebSocket for sending message', error);
+      return false;
+    }
+  }
+  
   return sendMessage({
     type: 'chat-message',
     message
