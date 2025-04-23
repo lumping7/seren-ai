@@ -1,9 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { queryClient, apiRequest } from '@/lib/queryClient';
-import { Loader2, Terminal, Code, Cpu, GitBranch, Play, Pause, RefreshCw, Layers, FileText, Eye } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { 
+  Loader2, 
+  Code, 
+  Cpu, 
+  GitBranch, 
+  Play, 
+  Pause, 
+  RefreshCw, 
+  FileText, 
+  ArrowRight, 
+  Brain,
+  Settings,
+  BarChart3,
+  Search,
+  MessageSquare
+} from 'lucide-react';
 
 import {
   Card,
@@ -31,47 +46,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
-import * as z from 'zod';
-
-// Project creation form schema
-const projectSchema = z.object({
-  name: z.string().min(1, 'Project name is required').max(100, 'Project name is too long'),
-  description: z.string().min(1, 'Project description is required'),
-  requirements: z.string().min(10, 'Detailed requirements are required'),
-  primaryModel: z.string().optional(),
-  language: z.string().optional(),
-  framework: z.string().optional(),
-  priorityLevel: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
-});
-
-// Code generation form schema
-const codeGenSchema = z.object({
-  requirements: z.string().min(10, 'Requirements are required'),
-  language: z.string().optional(),
-  framework: z.string().optional(),
-  primaryModel: z.string().optional(),
-});
-
-// Direct code enhancement schema
-const enhanceSchema = z.object({
-  code: z.string().min(1, 'Code is required'),
-  enhancement: z.enum(['optimize', 'refactor', 'document', 'test', 'fix']).default('optimize'),
-  language: z.string().optional(),
-  requirements: z.string().optional(),
-});
 
 export default function Dashboard() {
   const { user } = useAuth();
